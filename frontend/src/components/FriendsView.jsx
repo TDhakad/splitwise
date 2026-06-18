@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { avatarColor, initials } from '../lib/utils';
+import { avatarColor, initials } from '../lib/utils.js';
 import { apiFetch } from '../lib/constants';
 
 export default function FriendsView({ users, rawBalances, balances, currentUserId, onSettleUp, onSelectFriend, refreshTrigger, onRefresh }) {

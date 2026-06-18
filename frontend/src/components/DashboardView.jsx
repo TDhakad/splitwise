@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { initials } from '../lib/utils';
+import { initials } from '../lib/utils.js';
 
 export default function DashboardView({ balances, rawBalances, groups, users, currentUserId }) {
     const netBalance = balances.net_balance || 0;

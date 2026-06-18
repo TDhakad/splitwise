@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { avatarColor, initials } from '../lib/utils';
+import { avatarColor, initials } from '../lib/utils.js';
 
 export default function GroupsView({ groups, rawBalances, currentUserId, onCreateGroup, onAddExpense, onSelect }) {
     const calculateGroupNet = (groupId) => {

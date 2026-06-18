@@ -4,9 +4,9 @@ import MSIcon from './MSIcon';
 import CustomDropdown from './CustomDropdown';
 import ReviewReceiptStep from './ReviewReceiptStep';
 import ItemizedSplitStep from './ItemizedSplitStep';
-import { avatarColor, initials } from '../lib/utils';
-import { API_BASE_URL, apiFetch } from '../lib/constants';
-
+import { avatarColor, initials } from '../lib/utils.js';
+import { API_BASE_URL, apiFetch } from '../lib/constants.js';
+  
 export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx, onClose, onSave }) {
   const [step, setStep] = useState('add');
   const [entryMode, setEntryMode] = useState('manual'); // 'manual' or 'scan'

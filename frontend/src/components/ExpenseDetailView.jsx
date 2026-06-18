@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { avatarColor, initials } from '../lib/utils';
-import { API_BASE_URL, apiFetch } from '../lib/constants';
+import { avatarColor, initials } from '../lib/utils.js';
+import { API_BASE_URL, apiFetch } from '../lib/constants.js';
 
 export default function ExpenseDetailView({ expense, context, users, currentUserId, refreshTrigger, onBack, onEdit }) {
    const [auditLogs, setAuditLogs] = useState([]);

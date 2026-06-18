@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import CustomDropdown from './CustomDropdown';
-import { avatarColor, initials } from '../lib/utils';
-import { API_BASE_URL, apiFetch } from '../lib/constants';
+import { avatarColor, initials } from '../lib/utils.js';
+import { API_BASE_URL, apiFetch } from '../lib/constants.js';
 
 export default function EditExpenseModal({ expense, users, currentUserId, onClose, onSave }) {
   // State initialization from existing expense

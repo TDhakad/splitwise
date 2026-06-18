@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { avatarColor, initials } from '../lib/utils';
+import { avatarColor, initials } from '../lib/utils.js';
 
 export default function FriendDetailView({ friendId, users, rawBalances, balances, expenses, groups, currentUserId, onBack, onSettleUp }) {
   const friend = users.find(u => u.id === friendId) || { name: 'Unknown', id: friendId };

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
-import { avatarColor, initials } from '../lib/utils';
-import { API_BASE_URL, apiFetch } from '../lib/constants';
-
+import { avatarColor, initials } from '../lib/utils.js';
+import { API_BASE_URL, apiFetch } from '../lib/constants.js';
+  
 export default function CreateGroupModal({ users, currentUserId, onClose, onSave }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

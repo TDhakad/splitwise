@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import CustomDropdown from './CustomDropdown';
-import { avatarColor, initials } from '../lib/utils';
-import { API_BASE_URL, apiFetch } from '../lib/constants';
+import { avatarColor, initials } from '../lib/utils.js';
+import { API_BASE_URL, apiFetch } from '../lib/constants.js';
 
 export default function SettleUpModal({ onClose, onSave, users, currentUserId, defaultPayeeId, defaultAmount, defaultGroupId }) {
    const [payeeId, setPayeeId] = useState(defaultPayeeId || '');

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import MSIcon from './MSIcon';
 import clsx from 'clsx';
-import { avatarColor, initials } from '../lib/utils';
+import { avatarColor, initials } from '../lib/utils.js';
 
 export default function ItemizedSplitStep({ receiptData, users, involvedUsers, currentUserId, payerId, onSave, onClose, onBack }) {
   const activeUsers = users.filter(u => involvedUsers[u.id]);
