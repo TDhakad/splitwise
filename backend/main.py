@@ -54,9 +54,7 @@ if firebase_bucket:
 else:
     storage_backend = LocalStorage("uploads")
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Splitwise Clone API"}
+
 
 @app.post("/receipts/scan")
 async def scan_receipt(file: UploadFile = File(...)):
