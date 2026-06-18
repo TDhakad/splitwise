@@ -66,14 +66,10 @@ export function SettlementActivityRow({ activity, users, currentUserId }) {
             <p className="text-sm text-gray-500 mt-1">
                {activity.timeAgo} {activity.groupName ? `in '${activity.groupName}'` : ''}
             </p>
-            <div className="mt-4">
-               <button className="px-4 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
-                  View Transaction
-               </button>
-            </div>
          </div>
 
          <div className="text-right shrink-0 pt-1 ml-4 flex flex-col items-end">
+            <p className="text-xl font-bold text-[#007A64]">${activity.amount.toFixed(2)}</p>
             <div className="flex items-center gap-1.5 text-gray-700 justify-end mt-1">
                <MSIcon name="check_circle" className="text-sm text-[#007A64]" />
                <span className="text-xs font-bold tracking-widest uppercase text-[#007A64]">Settled</span>

@@ -4,7 +4,7 @@ import MSIcon from './MSIcon';
 import { avatarColor, initials } from '../lib/utils.js';
 import { apiFetch } from '../lib/constants';
 
-export default function FriendsView({ users, rawBalances, balances, currentUserId, onSettleUp, onSelectFriend, refreshTrigger, onRefresh }) {
+export default function FriendsView({ users, rawBalances, balances, currentUserId, onSettleUp, onSelectFriend, onRefresh }) {
   const [query, setQuery] = useState('');
   const [requests, setRequests] = useState([]);
   
@@ -16,7 +16,7 @@ export default function FriendsView({ users, rawBalances, balances, currentUserI
 
   useEffect(() => {
     fetchRequests();
-  }, [refreshTrigger]);
+  }, []);
 
   const fetchRequests = async () => {
     try {
@@ -242,13 +242,13 @@ export default function FriendsView({ users, rawBalances, balances, currentUserI
                     </td>
                     <td className="px-6 py-4 text-right align-middle">
                        {f.net > 0 && (
-                          <button onClick={(e) => e.stopPropagation()} className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
-                             Remind
+                          <button onClick={(e) => { e.stopPropagation(); onSettleUp({ payerId: f.id, payeeId: currentUserId, amount: f.net, maxAmount: f.net }); }} className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
+                             Record Payment
                           </button>
                        )}
                        {f.net < 0 && (
                           <button 
-                             onClick={(e) => { e.stopPropagation(); onSettleUp(f.id, f.net); }} 
+                             onClick={(e) => { e.stopPropagation(); onSettleUp({ payerId: currentUserId, payeeId: f.id, amount: Math.abs(f.net), maxAmount: Math.abs(f.net) }); }}
                              className="bg-[#007A64] text-white hover:bg-[#00604f] px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]"
                           >
                              Settle Up

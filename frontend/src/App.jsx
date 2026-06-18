@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import MSIcon from './components/MSIcon';
 import DashboardView from './components/DashboardView';
@@ -14,7 +14,7 @@ import EditExpenseModal from './components/EditExpenseModal';
 import SettleUpModal from './components/SettleUpModal';
 import LoginView from './components/LoginView';
 import SignupView from './components/SignupView';
-import { API_BASE_URL, apiFetch } from './lib/constants';
+import { apiFetch } from './lib/constants';
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('access_token'));
@@ -31,13 +31,16 @@ export default function App() {
   const [selectedExpenseCtx, setSelectedExpenseCtx] = useState(null);
   const [showEditExpense, setShowEditExpense] = useState(false);
   const [settleUpCtx, setSettleUpCtx] = useState(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [groupRefreshTrigger, setGroupRefreshTrigger] = useState(0);
+  const [expenseAuditRefreshTrigger, setExpenseAuditRefreshTrigger] = useState(0);
   
   const [balances, setBalances] = useState({ total_owes: 0, total_owed: 0, net_balance: 0 });
   const [rawBalances, setRawBalances] = useState([]);
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [settlements, setSettlements] = useState([]);
+  const fetchCoreRequestId = useRef(0);
 
   useEffect(() => {
     if (token) {
@@ -69,40 +72,42 @@ export default function App() {
 
   const fetchCore = async () => {
     if (!currentUser) return;
+    const requestId = ++fetchCoreRequestId.current;
+
     try {
-      const [uRes, gRes, bRes, eRes, rbRes] = await Promise.all([
+      const [uRes, gRes, bRes, eRes, sRes, rbRes] = await Promise.all([
         apiFetch('/users/'),
         apiFetch('/groups/'),
         apiFetch(`/balances/summary/${currentUser.id}`),
         apiFetch(`/users/${currentUser.id}/expenses`),
+        apiFetch(`/users/${currentUser.id}/settlements`),
         apiFetch(`/balances/${currentUser.id}`),
       ]);
-      setUsers(await uRes.json());
-      const allGroups = await gRes.json();
-      
-      const detailedGroups = await Promise.all(allGroups.map(async (g) => {
-         const res = await apiFetch(`/groups/${g.id}`);
-         return res.ok ? await res.json() : g;
-      }));
-      setGroups(detailedGroups);
-      
-      setBalances(await bRes.json());
-      setExpenses(await eRes.json());
-      setRawBalances(await rbRes.json());
-      setRefreshTrigger(prev => prev + 1);
-    } catch (e) { console.error('fetch failed', e); }
+      const [friends, allGroups, balanceData, expenseData, settlementData, rawBalanceData] = await Promise.all([
+        uRes.json(),
+        gRes.json(),
+        bRes.json(),
+        eRes.json(),
+        sRes.json(),
+        rbRes.json(),
+      ]);
+      if (requestId !== fetchCoreRequestId.current) return;
+
+      const selectableUsers = [currentUser, ...friends.filter(u => u.id !== currentUser.id)];
+      setUsers(selectableUsers);
+      setGroups(allGroups);
+      setBalances(balanceData);
+      setExpenses(expenseData);
+      setSettlements(settlementData);
+      setRawBalances(rawBalanceData);
+    } catch (e) {
+      console.error('fetch failed', e);
+    }
   };
 
   useEffect(() => {
     if (currentUser) {
       fetchCore();
-      const evtSource = new EventSource(`${API_BASE_URL}/events`);
-      evtSource.onmessage = (event) => {
-        console.log('SSE update received:', event.data);
-        fetchCore();
-        setRefreshTrigger(prev => prev + 1);
-      };
-      return () => evtSource.close();
     }
   }, [currentUser]);
 
@@ -117,6 +122,22 @@ export default function App() {
 
   const handleLogout = () => {
     setToken(null);
+  };
+
+  const openSettleUpModal = (payeeOrOptions, amount = null, groupId = null) => {
+    if (typeof payeeOrOptions === 'object' && payeeOrOptions !== null) {
+      setSettleUpCtx(payeeOrOptions);
+      return;
+    }
+
+    const friendId = payeeOrOptions;
+    const signedAmount = Number(amount) || 0;
+    const normalizedAmount = Math.abs(signedAmount);
+    if (signedAmount < 0) {
+      setSettleUpCtx({ payerId: currentUser.id, payeeId: friendId, amount: normalizedAmount, groupId });
+    } else {
+      setSettleUpCtx({ payerId: friendId, payeeId: currentUser.id, amount: normalizedAmount, groupId });
+    }
   };
 
   if (isInitializing) {
@@ -209,22 +230,22 @@ export default function App() {
             {activeTab === 'dashboard' && <DashboardView balances={balances} rawBalances={rawBalances} groups={groups} users={users} currentUserId={currentUser.id} />}
             
             {activeTab === 'groups' && !selectedGroupId && !selectedExpenseCtx && <GroupsView groups={groups} rawBalances={rawBalances} currentUserId={currentUser.id} onCreateGroup={() => setShowCreateGroup(true)} onAddExpense={openExpenseModal} onSelect={setSelectedGroupId} />}
-            {activeTab === 'groups' && selectedGroupId && !selectedExpenseCtx && <GroupDetailView groupId={selectedGroupId} currentUserId={currentUser.id} users={users} refreshTrigger={refreshTrigger} onRefresh={fetchCore} onAddExpense={openExpenseModal} onSelectExpense={(exp, grp) => setSelectedExpenseCtx({ expense: exp, from: 'group', groupName: grp.name })} onBack={() => setSelectedGroupId(null)} onSettleUp={(opts) => setSettleUpCtx({ groupId: selectedGroupId, ...opts })} />}
+            {activeTab === 'groups' && selectedGroupId && !selectedExpenseCtx && <GroupDetailView groupId={selectedGroupId} currentUserId={currentUser.id} users={users} refreshTrigger={groupRefreshTrigger} onRefresh={fetchCore} onAddExpense={openExpenseModal} onSelectExpense={(exp, grp) => setSelectedExpenseCtx({ expense: exp, from: 'group', groupName: grp.name })} onBack={() => setSelectedGroupId(null)} onSettleUp={(opts) => openSettleUpModal({ groupId: selectedGroupId, ...opts })} />}
             
-            {activeTab === 'activity' && !selectedExpenseCtx && <ActivityView expenses={expenses} groups={groups} users={users} currentUserId={currentUser.id} onSelectExpense={(exp) => setSelectedExpenseCtx({ expense: exp, from: 'activity' })} />}
+            {activeTab === 'activity' && !selectedExpenseCtx && <ActivityView expenses={expenses} settlements={settlements} groups={groups} users={users} currentUserId={currentUser.id} onSelectExpense={(exp) => setSelectedExpenseCtx({ expense: exp, from: 'activity' })} />}
             
-            {activeTab === 'friends' && !selectedFriendId && <FriendsView users={users} rawBalances={rawBalances} balances={balances} currentUserId={currentUser.id} onSettleUp={(payeeId, amount) => setSettleUpCtx({ payeeId, amount })} onSelectFriend={setSelectedFriendId} refreshTrigger={refreshTrigger} onRefresh={fetchCore} />}
-            {activeTab === 'friends' && selectedFriendId && <FriendDetailView friendId={selectedFriendId} users={users} rawBalances={rawBalances} balances={balances} expenses={expenses} groups={groups} currentUserId={currentUser.id} onBack={() => setSelectedFriendId(null)} onSettleUp={(payeeId, amount, groupId) => setSettleUpCtx({ payeeId, amount, groupId })} />}
+            {activeTab === 'friends' && !selectedFriendId && <FriendsView users={users} rawBalances={rawBalances} balances={balances} currentUserId={currentUser.id} onSettleUp={openSettleUpModal} onSelectFriend={setSelectedFriendId} onRefresh={fetchCore} />}
+            {activeTab === 'friends' && selectedFriendId && <FriendDetailView friendId={selectedFriendId} users={users} rawBalances={rawBalances} balances={balances} expenses={expenses} groups={groups} currentUserId={currentUser.id} onBack={() => setSelectedFriendId(null)} onSettleUp={openSettleUpModal} />}
             
-            {selectedExpenseCtx && <ExpenseDetailView expense={selectedExpenseCtx.expense} context={selectedExpenseCtx} users={users} currentUserId={currentUser.id} refreshTrigger={refreshTrigger} onEdit={() => setShowEditExpense(true)} onBack={() => setSelectedExpenseCtx(null)} />}
+            {selectedExpenseCtx && <ExpenseDetailView expense={selectedExpenseCtx.expense} context={selectedExpenseCtx} users={users} currentUserId={currentUser.id} refreshTrigger={expenseAuditRefreshTrigger} onEdit={() => setShowEditExpense(true)} onBack={() => setSelectedExpenseCtx(null)} />}
          </main>
       </div>
 
       {/* Modals */}
-      {showAddExpense && <AddExpenseFlow users={users} groups={groups} currentUserId={currentUser.id} groupCtx={expenseGroupCtx} onClose={() => setShowAddExpense(false)} onSave={() => { setShowAddExpense(false); fetchCore(); }} />}
+      {showAddExpense && <AddExpenseFlow users={users} groups={groups} currentUserId={currentUser.id} groupCtx={expenseGroupCtx} onClose={() => setShowAddExpense(false)} onSave={() => { setShowAddExpense(false); fetchCore(); if (selectedGroupId || expenseGroupCtx) setGroupRefreshTrigger(prev => prev + 1); }} />}
       {showCreateGroup && <CreateGroupModal users={users} currentUserId={currentUser.id} onClose={() => setShowCreateGroup(false)} onSave={() => { setShowCreateGroup(false); fetchCore(); }} />}
-      {showEditExpense && <EditExpenseModal expense={selectedExpenseCtx.expense} users={users} currentUserId={currentUser.id} onClose={() => setShowEditExpense(false)} onSave={() => { setShowEditExpense(false); fetchCore(); }} />}
-      {settleUpCtx && <SettleUpModal users={users} currentUserId={currentUser.id} defaultPayeeId={settleUpCtx.payeeId} defaultAmount={settleUpCtx.amount} defaultGroupId={settleUpCtx.groupId} onClose={() => setSettleUpCtx(null)} onSave={() => { setSettleUpCtx(null); fetchCore(); }} />}
+      {showEditExpense && <EditExpenseModal expense={selectedExpenseCtx.expense} users={users} currentUserId={currentUser.id} onClose={() => setShowEditExpense(false)} onSave={() => { setShowEditExpense(false); fetchCore(); setGroupRefreshTrigger(prev => prev + 1); setExpenseAuditRefreshTrigger(prev => prev + 1); }} />}
+      {settleUpCtx && <SettleUpModal users={users} currentUserId={currentUser.id} defaultPayerId={settleUpCtx.payerId} defaultPayeeId={settleUpCtx.payeeId} defaultAmount={settleUpCtx.amount} defaultMaxAmount={settleUpCtx.maxAmount} defaultGroupId={settleUpCtx.groupId} onClose={() => setSettleUpCtx(null)} onSave={() => { setSettleUpCtx(null); fetchCore(); if (selectedGroupId || settleUpCtx.groupId) setGroupRefreshTrigger(prev => prev + 1); }} />}
     </div>
   );
 }

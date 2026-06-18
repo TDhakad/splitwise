@@ -1,16 +1,16 @@
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Literal, Optional
 from datetime import datetime
 
 # Users
 class UserBase(BaseModel):
     email: EmailStr
-    name: str
+    name: str = Field(min_length=1)
     avatar_url: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: Optional[str] = None
-    auth_provider: Optional[str] = "local"
+    password: Optional[str] = Field(default=None, min_length=8)
+    auth_provider: Optional[Literal["local", "google"]] = "local"
     auth_provider_id: Optional[str] = None
 
 class Token(BaseModel):
@@ -31,7 +31,7 @@ class User(UserBase):
 
 # Groups
 class GroupBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     description: Optional[str] = None
     simplify_debts: Optional[bool] = False
 
@@ -54,7 +54,7 @@ class GroupDetail(Group):
 class BalanceSummary(BaseModel):
     from_user_id: int
     to_user_id: int
-    amount: float
+    amount: float = Field(ge=0)
     group_id: Optional[int] = None
     
     class Config:
@@ -63,18 +63,18 @@ class BalanceSummary(BaseModel):
 # Expenses
 class ExpenseParticipantBase(BaseModel):
     user_id: int
-    amount_paid: float = 0.0
-    amount_owed: float = 0.0
+    amount_paid: float = Field(default=0.0, ge=0)
+    amount_owed: float = Field(default=0.0, ge=0)
 
 class ExpenseCreate(BaseModel):
     group_id: Optional[int] = None
-    description: str
-    total_amount: float
-    currency: str = "USD"
+    description: str = Field(min_length=1)
+    total_amount: float = Field(gt=0)
+    currency: Literal["USD"] = "USD"
     date: Optional[datetime] = None
     category: Optional[str] = None
     has_receipt: Optional[bool] = False
-    participants: List[ExpenseParticipantBase]
+    participants: List[ExpenseParticipantBase] = Field(min_length=1)
 
 class ExpenseParticipant(ExpenseParticipantBase):
     id: int
@@ -107,8 +107,8 @@ class SettlementCreate(BaseModel):
     group_id: Optional[int] = None
     payer_id: int
     payee_id: int
-    amount: float
-    currency: str = "USD"
+    amount: float = Field(gt=0)
+    currency: Literal["USD"] = "USD"
     
 class Settlement(SettlementCreate):
     id: int

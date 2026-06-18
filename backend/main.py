@@ -1,13 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, text
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import or_, and_, func
 from typing import List
 import datetime
-import asyncio
 import base64
 import os
 import fitz
@@ -19,7 +17,7 @@ from fastapi.encoders import jsonable_encoder
 from . import models, schemas
 from .database import SessionLocal, engine
 from .auth import get_password_hash, verify_password, create_access_token, verify_google_token, get_current_user
-from .storage import LocalStorage
+from .config import settings
 from .util import process_receipt_image
 
 # Create the database tables
@@ -29,10 +27,10 @@ app = FastAPI(title="Splitwise Clone API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Dependency
@@ -43,29 +41,26 @@ def get_db():
     finally:
         db.close()
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-from .storage import LocalStorage, FirebaseStorage
-import os
-
-firebase_bucket = os.getenv("FIREBASE_STORAGE_BUCKET")
-if firebase_bucket:
-    storage_backend = FirebaseStorage(firebase_bucket)
-else:
-    storage_backend = LocalStorage("uploads")
-
+MAX_RECEIPT_UPLOAD_BYTES = 5 * 1024 * 1024
+ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 
 
 @app.post("/receipts/scan")
-async def scan_receipt(file: UploadFile = File(...)):
+async def scan_receipt(file: UploadFile = File(...), _current_user: models.User = Depends(get_current_user)):
     import tempfile
-    import os
-    from io import BytesIO
     
-    file_bytes = await file.read()
+    if file.content_type not in ALLOWED_RECEIPT_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported file type")
+
+    file_bytes = await file.read(MAX_RECEIPT_UPLOAD_BYTES + 1)
+    if len(file_bytes) > MAX_RECEIPT_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large")
     
+    preview_content_type = file.content_type
+
     # If PDF, convert first page to image
-    if file.filename.lower().endswith('.pdf') or file.content_type == 'application/pdf':
+    filename = file.filename or ""
+    if filename.lower().endswith('.pdf') or file.content_type == 'application/pdf':
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
             temp_pdf.write(file_bytes)
             temp_pdf_path = temp_pdf.name
@@ -82,33 +77,17 @@ async def scan_receipt(file: UploadFile = File(...)):
         # Cleanup
         os.remove(temp_pdf_path)
         os.remove(temp_png.name)
-        
-        # Override file object with PNG for upload using a simple mock class
-        class ProcessedFile:
-            def __init__(self, filename, file_obj, content_type):
-                self.filename = filename
-                self.file = file_obj
-                self.content_type = content_type
 
-        file = ProcessedFile(
-            file.filename.rsplit('.', 1)[0] + '.png',
-            BytesIO(img_bytes),
-            'image/png'
-        )
         file_bytes = img_bytes
-    else:
-        file.file.seek(0)
+        preview_content_type = "image/png"
         
-    # Save the file (works for both local and GCS)
-    file_url = storage_backend.save(file)
-    
     # Process for base64
     base64_image = base64.b64encode(file_bytes).decode("utf-8")
         
     try:
         parsed_receipt = process_receipt_image(base64_image)
         return {
-            "image_url": file_url,
+            "image_url": f"data:{preview_content_type};base64,{base64_image}",
             "data": parsed_receipt.dict()
         }
     except Exception as e:
@@ -121,16 +100,18 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    if not user.password:
+        raise HTTPException(status_code=400, detail="Password is required")
     
-    hashed_password = get_password_hash(user.password) if user.password else None
+    hashed_password = get_password_hash(user.password)
     
     db_user = models.User(
         email=user.email,
         name=user.name,
         avatar_url=user.avatar_url,
         hashed_password=hashed_password,
-        auth_provider=user.auth_provider,
-        auth_provider_id=user.auth_provider_id
+        auth_provider="local",
+        auth_provider_id=None
     )
     db.add(db_user)
     db.commit()
@@ -173,48 +154,11 @@ def google_auth(auth_req: schemas.GoogleAuthRequest, db: Session = Depends(get_d
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# --- SSE Events ---
-
-clients = []
-main_loop = None
-
-@app.on_event("startup")
-async def startup_event():
-    global main_loop
-    main_loop = asyncio.get_running_loop()
-
-@app.get("/events")
-async def sse_events():
-    queue = asyncio.Queue()
-    clients.append(queue)
-    async def event_generator():
-        try:
-            while True:
-                msg = await queue.get()
-                yield f"data: {msg}\n\n"
-        except asyncio.CancelledError:
-            if queue in clients:
-                clients.remove(queue)
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-def notify_clients():
-    if main_loop:
-        for q in clients:
-            main_loop.call_soon_threadsafe(q.put_nowait, "update")
-
 # --- Users ---
 
 @app.get("/users/me", response_model=schemas.User)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return current_user
-
-@app.post("/users/", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = models.User(email=user.email, name=user.name, avatar_url=user.avatar_url)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
 
 @app.get("/users/", response_model=List[schemas.User])
 def read_users(skip: int = 0, limit: int = 100, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -259,7 +203,6 @@ def send_friend_request(request: schemas.FriendshipCreate, current_user: models.
             existing.updated_at = datetime.datetime.utcnow()
             db.commit()
             db.refresh(existing)
-            notify_clients()
             return existing
         else:
             raise HTTPException(status_code=400, detail=f"Friendship already exists with status: {existing.status}")
@@ -272,7 +215,6 @@ def send_friend_request(request: schemas.FriendshipCreate, current_user: models.
     db.add(new_request)
     db.commit()
     db.refresh(new_request)
-    notify_clients()
     return new_request
 
 @app.put("/friends/request/{id}", response_model=schemas.Friendship)
@@ -296,7 +238,6 @@ def update_friend_request(id: int, status: str, current_user: models.User = Depe
     friendship.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(friendship)
-    notify_clients()
     return friendship
 
 @app.get("/friends/requests", response_model=List[schemas.FriendshipWithUsers])
@@ -315,26 +256,41 @@ def get_friend_requests(current_user: models.User = Depends(get_current_user), d
 def create_group(group: schemas.GroupCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     db_group = models.Group(**group.model_dump(), created_by=current_user.id)
     db.add(db_group)
-    db.commit()
-    db.refresh(db_group)
+    db.flush()
     
     # Add creator as a member
     member = models.GroupMember(group_id=db_group.id, user_id=current_user.id)
     db.add(member)
     db.commit()
+    db.refresh(db_group)
     return db_group
 
-@app.get("/groups/", response_model=List[schemas.Group])
+@app.get("/groups/", response_model=List[schemas.GroupDetail])
 def read_groups(skip: int = 0, limit: int = 100, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     # Only return groups the user is a member of
-    groups = db.query(models.Group).join(models.GroupMember).filter(
+    groups = db.query(models.Group).options(
+        selectinload(models.Group.members).selectinload(models.GroupMember.user)
+    ).join(models.GroupMember).filter(
         models.GroupMember.user_id == current_user.id
     ).offset(skip).limit(limit).all()
-    return groups
+    return [
+        {
+            "id": group.id,
+            "name": group.name,
+            "description": group.description,
+            "simplify_debts": group.simplify_debts,
+            "created_by": group.created_by,
+            "created_at": group.created_at,
+            "members": [gm.user for gm in group.members],
+        }
+        for group in groups
+    ]
 
 @app.get("/groups/{group_id}", response_model=schemas.GroupDetail)
 def read_group(group_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    group = db.query(models.Group).options(
+        selectinload(models.Group.members).selectinload(models.GroupMember.user)
+    ).filter(models.Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
         
@@ -354,13 +310,26 @@ def read_group_expenses(group_id: int, current_user: models.User = Depends(get_c
     if not group or current_user.id not in [gm.user_id for gm in group.members]:
         raise HTTPException(status_code=403, detail="Not authorized to view this group's expenses")
         
-    expenses = db.query(models.Expense).filter(models.Expense.group_id == group_id).order_by(models.Expense.date.desc()).all()
+    expenses = db.query(models.Expense).options(
+        selectinload(models.Expense.participants),
+        joinedload(models.Expense.creator),
+    ).filter(models.Expense.group_id == group_id).order_by(models.Expense.date.desc()).all()
     result = []
     for e in expenses:
         item = schemas.ExpenseWithCreator.model_validate(e)
         item.creator_name = e.creator.name if e.creator else None
         result.append(item)
     return result
+
+@app.get("/groups/{group_id}/settlements", response_model=List[schemas.Settlement])
+def read_group_settlements(group_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    group = db.query(models.Group).filter(models.Group.id == group_id).first()
+    if not group or current_user.id not in [gm.user_id for gm in group.members]:
+        raise HTTPException(status_code=403, detail="Not authorized to view this group's settlements")
+
+    return db.query(models.Settlement).filter(
+        models.Settlement.group_id == group_id
+    ).order_by(models.Settlement.date.desc()).all()
 
 @app.get("/groups/{group_id}/balances", response_model=List[schemas.BalanceSummary])
 def read_group_balances(group_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -393,9 +362,7 @@ def toggle_simplify_debts(group_id: int, enable: bool, current_user: models.User
         raise HTTPException(status_code=403, detail="Not authorized to manage this group")
         
     group.simplify_debts = enable
-    db.commit()
     rebuild_balances(group_id, db)
-    notify_clients()
     return {"status": "success", "simplify_debts": enable}
 
 # --- Expenses & Balances ---
@@ -404,23 +371,32 @@ def rebuild_balances(group_id, db: Session):
     db.query(models.Balance).filter(models.Balance.group_id == group_id).delete()
     db.flush()
 
-    expenses = db.query(models.Expense).filter(models.Expense.group_id == group_id).all()
-    settlements = db.query(models.Settlement).filter(models.Settlement.group_id == group_id).all()
-    
     group = None
     if group_id is not None:
-        group = db.query(models.Group).get(group_id)
+        group = db.get(models.Group, group_id)
 
     simplify_debts = group.simplify_debts if group else True
+    balance_rows = []
+    settlements = db.query(
+        models.Settlement.payer_id,
+        models.Settlement.payee_id,
+        models.Settlement.amount,
+    ).filter(models.Settlement.group_id == group_id).all()
 
     if simplify_debts:
         nets = defaultdict(float)
-        for exp in expenses:
-            for p in exp.participants:
-                nets[p.user_id] += (p.amount_paid - p.amount_owed)
-        for stl in settlements:
-            nets[stl.payer_id] += stl.amount
-            nets[stl.payee_id] -= stl.amount
+        participant_nets = db.query(
+            models.ExpenseParticipant.user_id,
+            func.sum(models.ExpenseParticipant.amount_paid - models.ExpenseParticipant.amount_owed),
+        ).join(models.Expense).filter(
+            models.Expense.group_id == group_id
+        ).group_by(models.ExpenseParticipant.user_id).all()
+
+        for user_id, net_amount in participant_nets:
+            nets[user_id] += net_amount or 0
+        for payer_id, payee_id, amount in settlements:
+            nets[payer_id] += amount
+            nets[payee_id] -= amount
             
         creditors = {u: amt for u, amt in nets.items() if amt > 0.01}
         debtors = {u: -amt for u, amt in nets.items() if amt < -0.01}
@@ -433,14 +409,11 @@ def rebuild_balances(group_id, db: Session):
                 d_amt -= settle
                 creditors[c_id] -= settle
                 
-                db.add(models.Balance(group_id=group_id, from_user_id=d_id, to_user_id=c_id, amount=settle))
+                balance_rows.append(models.Balance(group_id=group_id, from_user_id=d_id, to_user_id=c_id, amount=settle))
     else:
         pairwise = defaultdict(lambda: defaultdict(float))
-        for exp in expenses:
-            exp_nets = defaultdict(float)
-            for p in exp.participants:
-                exp_nets[p.user_id] += (p.amount_paid - p.amount_owed)
-                
+
+        def apply_expense_nets(exp_nets):
             e_creditors = {u: amt for u, amt in exp_nets.items() if amt > 0.01}
             e_debtors = {u: -amt for u, amt in exp_nets.items() if amt < -0.01}
             
@@ -452,21 +425,42 @@ def rebuild_balances(group_id, db: Session):
                     d_amt -= settle
                     e_creditors[c_id] -= settle
                     pairwise[d_id][c_id] += settle
+
+        participant_rows = db.query(
+            models.ExpenseParticipant.expense_id,
+            models.ExpenseParticipant.user_id,
+            models.ExpenseParticipant.amount_paid,
+            models.ExpenseParticipant.amount_owed,
+        ).join(models.Expense).filter(
+            models.Expense.group_id == group_id
+        ).order_by(models.ExpenseParticipant.expense_id).all()
+
+        current_expense_id = None
+        exp_nets = defaultdict(float)
+        for expense_id, user_id, amount_paid, amount_owed in participant_rows:
+            if current_expense_id is not None and expense_id != current_expense_id:
+                apply_expense_nets(exp_nets)
+                exp_nets = defaultdict(float)
+            current_expense_id = expense_id
+            exp_nets[user_id] += (amount_paid - amount_owed)
+        if current_expense_id is not None:
+            apply_expense_nets(exp_nets)
                     
-        for stl in settlements:
-            pairwise[stl.payer_id][stl.payee_id] -= stl.amount
+        for payer_id, payee_id, amount in settlements:
+            pairwise[payer_id][payee_id] -= amount
             
         resolved = set()
-        for a in pairwise.keys():
-            for b in pairwise[a].keys():
+        for a, edges in list(pairwise.items()):
+            for b, amount_ab in list(edges.items()):
                 if (a, b) in resolved or (b, a) in resolved: continue
-                net_ab = pairwise[a][b] - pairwise[b][a]
+                net_ab = amount_ab - pairwise.get(b, {}).get(a, 0)
                 if net_ab > 0.01:
-                    db.add(models.Balance(group_id=group_id, from_user_id=a, to_user_id=b, amount=net_ab))
+                    balance_rows.append(models.Balance(group_id=group_id, from_user_id=a, to_user_id=b, amount=net_ab))
                 elif net_ab < -0.01:
-                    db.add(models.Balance(group_id=group_id, from_user_id=b, to_user_id=a, amount=-net_ab))
+                    balance_rows.append(models.Balance(group_id=group_id, from_user_id=b, to_user_id=a, amount=-net_ab))
                 resolved.add((a, b))
 
+    db.add_all(balance_rows)
     db.commit()
 
 @app.post("/expenses/", response_model=schemas.Expense)
@@ -476,6 +470,10 @@ def create_expense(expense: schemas.ExpenseCreate, current_user: models.User = D
         group = db.query(models.Group).filter(models.Group.id == expense.group_id).first()
         if not group or current_user.id not in [m.user_id for m in group.members]:
             raise HTTPException(status_code=403, detail="Not authorized to create expenses in this group")
+        member_ids = {m.user_id for m in group.members}
+        participant_ids = {p.user_id for p in expense.participants}
+        if not participant_ids.issubset(member_ids):
+            raise HTTPException(status_code=400, detail="Group expenses can only include group members.")
     else:
         # Individual expense: User must be a participant
         participant_ids = [p.user_id for p in expense.participants]
@@ -501,8 +499,7 @@ def create_expense(expense: schemas.ExpenseCreate, current_user: models.User = D
         has_receipt=expense.has_receipt or False
     )
     db.add(db_expense)
-    db.commit()
-    db.refresh(db_expense)
+    db.flush()
 
     # 4. Create Participants
     for p in expense.participants:
@@ -513,8 +510,6 @@ def create_expense(expense: schemas.ExpenseCreate, current_user: models.User = D
             amount_owed=p.amount_owed
         )
         db.add(db_participant)
-    db.commit()
-
     # 5. Rebuild balances dynamically
     rebuild_balances(expense.group_id, db)
     db.refresh(db_expense)
@@ -531,6 +526,10 @@ def update_expense(expense_id: int, expense_in: schemas.ExpenseCreate, current_u
         group = db.query(models.Group).filter(models.Group.id == db_expense.group_id).first()
         if not group or current_user.id not in [m.user_id for m in group.members]:
             raise HTTPException(status_code=403, detail="Not authorized to edit expenses in this group")
+        member_ids = {m.user_id for m in group.members}
+        participant_ids = {p.user_id for p in expense_in.participants}
+        if not participant_ids.issubset(member_ids):
+            raise HTTPException(status_code=400, detail="Group expenses can only include group members.")
     else:
         participant_ids = [p.user_id for p in db_expense.participants]
         if current_user.id != db_expense.created_by and current_user.id not in participant_ids:
@@ -562,12 +561,9 @@ def update_expense(expense_id: int, expense_in: schemas.ExpenseCreate, current_u
             amount_owed=p.amount_owed
         )
         db.add(db_participant)
-    db.commit()
-
     # 6. Rebuild balances dynamically
     rebuild_balances(db_expense.group_id, db)
 
-    db.commit()
     db.refresh(db_expense)
     return schemas.Expense.model_validate(db_expense)
 
@@ -590,8 +586,8 @@ def get_global_balance_summary(user_id: int, current_user: models.User = Depends
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' balances")
         
-    owes = sum(b.amount for b in db.query(models.Balance).filter(models.Balance.from_user_id == user_id).all())
-    owed = sum(b.amount for b in db.query(models.Balance).filter(models.Balance.to_user_id == user_id).all())
+    owes = db.query(func.coalesce(func.sum(models.Balance.amount), 0)).filter(models.Balance.from_user_id == user_id).scalar()
+    owed = db.query(func.coalesce(func.sum(models.Balance.amount), 0)).filter(models.Balance.to_user_id == user_id).scalar()
     return {"total_owes": owes, "total_owed": owed, "net_balance": owed - owes}
 
 @app.post("/settlements/", response_model=schemas.Settlement)
@@ -599,72 +595,89 @@ def create_settlement(settlement: schemas.SettlementCreate, current_user: models
     if current_user.id not in [settlement.payer_id, settlement.payee_id]:
         raise HTTPException(status_code=403, detail="You can only settle your own debts.")
         
+    if settlement.payer_id == settlement.payee_id:
+        raise HTTPException(status_code=400, detail="Payer and payee must be different users.")
+
     if settlement.amount <= 0:
         raise HTTPException(status_code=400, detail="Settlement amount must be positive.")
 
-    db_settlement = models.Settlement(
-        group_id=settlement.group_id,
-        payer_id=settlement.payer_id,
-        payee_id=settlement.payee_id,
-        amount=settlement.amount,
-        currency=settlement.currency,
-        date=datetime.datetime.utcnow(),
-        status="COMPLETED"
-    )
-    db.add(db_settlement)
-    db.commit()
+    settlement_cents = round(settlement.amount * 100)
 
-    if settlement.group_id:
-        rebuild_balances(settlement.group_id, db)
-    else:
-        query = db.query(models.Balance).filter(
+    if settlement.group_id is not None:
+        group = db.query(models.Group).filter(models.Group.id == settlement.group_id).first()
+        member_ids = {member.user_id for member in group.members} if group else set()
+        if not group or settlement.payer_id not in member_ids or settlement.payee_id not in member_ids:
+            raise HTTPException(status_code=403, detail="Payer and payee must both be group members.")
+
+        balance = db.query(models.Balance).filter(
+            models.Balance.group_id == settlement.group_id,
             models.Balance.from_user_id == settlement.payer_id,
-            models.Balance.to_user_id == settlement.payee_id
-        ).order_by(models.Balance.amount.desc()).all()
+            models.Balance.to_user_id == settlement.payee_id,
+        ).first()
+        outstanding_amount = balance.amount if balance else 0
+        outstanding_cents = round(outstanding_amount * 100)
+        if outstanding_cents <= 0:
+            raise HTTPException(status_code=400, detail="No outstanding balance exists in this payer/payee direction.")
+        if settlement_cents > outstanding_cents:
+            raise HTTPException(status_code=400, detail=f"Settlement amount cannot exceed the outstanding balance of ${outstanding_amount:.2f}.")
+
+        db_settlement = models.Settlement(
+            group_id=settlement.group_id,
+            payer_id=settlement.payer_id,
+            payee_id=settlement.payee_id,
+            amount=settlement.amount,
+            currency=settlement.currency,
+            date=datetime.datetime.utcnow(),
+            status="COMPLETED"
+        )
+        db.add(db_settlement)
+        db.flush()
+        rebuild_balances(settlement.group_id, db)
+        db.refresh(db_settlement)
+        return db_settlement
+
+    query = db.query(models.Balance).filter(
+        models.Balance.from_user_id == settlement.payer_id,
+        models.Balance.to_user_id == settlement.payee_id
+    ).order_by(models.Balance.amount.desc()).all()
+
+    outstanding_amount = sum(b.amount for b in query)
+    outstanding_cents = round(outstanding_amount * 100)
+    if outstanding_cents <= 0:
+        raise HTTPException(status_code=400, detail="No outstanding balance exists in this payer/payee direction.")
+    if settlement_cents > outstanding_cents:
+        raise HTTPException(status_code=400, detail=f"Settlement amount cannot exceed the outstanding balance of ${outstanding_amount:.2f}.")
+
+    remaining = settlement.amount
+    groups_to_rebuild = set()
+    db_settlement = None
+
+    for b in query:
+        if remaining <= 0.01:
+            break
+        settle_amt = min(b.amount, remaining)
+        remaining -= settle_amt
         
-        remaining = settlement.amount
-        groups_to_rebuild = set()
-        
-        for b in query:
-            if remaining <= 0: break
-            settle_amt = min(b.amount, remaining)
-            remaining -= settle_amt
-            
-            sub_settlement = models.Settlement(
-                group_id=b.group_id,
-                payer_id=settlement.payer_id,
-                payee_id=settlement.payee_id,
-                amount=settle_amt,
-                currency=settlement.currency,
-                date=datetime.datetime.utcnow(),
-                status="COMPLETED"
-            )
-            db.add(sub_settlement)
-            groups_to_rebuild.add(b.group_id)
-            
-        if remaining > 0.01:
-            sub_settlement = models.Settlement(
-                group_id=None,
-                payer_id=settlement.payer_id,
-                payee_id=settlement.payee_id,
-                amount=remaining,
-                currency=settlement.currency,
-                date=datetime.datetime.utcnow(),
-                status="COMPLETED"
-            )
-            db.add(sub_settlement)
-            groups_to_rebuild.add(None)
-            
-        db.delete(db_settlement)
-        db.commit()
-        
-        for g_id in groups_to_rebuild:
-            rebuild_balances(g_id, db)
-        
-        db_settlement = db.query(models.Settlement).filter(models.Settlement.payer_id == settlement.payer_id).first()
+        sub_settlement = models.Settlement(
+            group_id=b.group_id,
+            payer_id=settlement.payer_id,
+            payee_id=settlement.payee_id,
+            amount=settle_amt,
+            currency=settlement.currency,
+            date=datetime.datetime.utcnow(),
+            status="COMPLETED"
+        )
+        db.add(sub_settlement)
+        db.flush()
+        if db_settlement is None:
+            db_settlement = sub_settlement
+        groups_to_rebuild.add(b.group_id)
+
     db.commit()
+    for g_id in groups_to_rebuild:
+        rebuild_balances(g_id, db)
+
     db.refresh(db_settlement)
-    
     return db_settlement
 
 # --- Audit Logs & User Expenses ---
@@ -692,8 +705,6 @@ def log_change(mapper, connection, target, action):
             changes=changes
         )
     )
-    
-    notify_clients()
 
 @event.listens_for(models.Expense, 'after_insert')
 def receive_after_insert(mapper, connection, target): log_change(mapper, connection, target, 'CREATE')
@@ -712,7 +723,11 @@ def get_all_user_expenses(user_id: int, current_user: models.User = Depends(get_
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' expenses")
         
-    expenses = db.query(models.Expense).outerjoin(models.ExpenseParticipant).filter(
+    expenses = db.query(models.Expense).options(
+        selectinload(models.Expense.participants),
+        joinedload(models.Expense.creator),
+        joinedload(models.Expense.group),
+    ).outerjoin(models.ExpenseParticipant).filter(
         or_(
             models.Expense.created_by == user_id,
             models.ExpenseParticipant.user_id == user_id
@@ -730,6 +745,18 @@ def get_all_user_expenses(user_id: int, current_user: models.User = Depends(get_
     
     result.sort(key=lambda x: x.date, reverse=True)
     return result
+
+@app.get("/users/{user_id}/settlements", response_model=List[schemas.Settlement])
+def get_all_user_settlements(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view other users' settlements")
+
+    return db.query(models.Settlement).filter(
+        or_(
+            models.Settlement.payer_id == user_id,
+            models.Settlement.payee_id == user_id,
+        )
+    ).order_by(models.Settlement.date.desc()).all()
 
 @app.get("/expenses/{expense_id}/audit", response_model=List[schemas.AuditLog])
 def get_expense_audit_logs(expense_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

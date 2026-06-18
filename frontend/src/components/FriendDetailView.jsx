@@ -65,14 +65,14 @@ export default function FriendDetailView({ friendId, users, rawBalances, balance
               {netBalance > 0 ? (
                 <>
                   <p className="text-lg font-bold text-[#007A64] mb-3">{friend.name.split(' ')[0]} owes you ${netBalance.toFixed(2)}</p>
-                  <button className="w-full bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
-                    Remind
+                  <button onClick={() => onSettleUp({ payerId: friendId, payeeId: currentUserId, amount: netBalance, maxAmount: netBalance })} className="w-full bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
+                    Record Payment
                   </button>
                 </>
               ) : netBalance < 0 ? (
                 <>
                   <p className="text-lg font-bold text-[#D93F3C] mb-3">You owe ${Math.abs(netBalance).toFixed(2)}</p>
-                  <button onClick={() => onSettleUp(friendId, netBalance)} className="w-full bg-[#007A64] text-white hover:bg-[#00604f] px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
+                  <button onClick={() => onSettleUp({ payerId: currentUserId, payeeId: friendId, amount: Math.abs(netBalance), maxAmount: Math.abs(netBalance) })} className="w-full bg-[#007A64] text-white hover:bg-[#00604f] px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
                     Settle Up
                   </button>
                 </>
@@ -126,11 +126,11 @@ export default function FriendDetailView({ friendId, users, rawBalances, balance
                       </td>
                       <td className="px-6 py-4 text-right align-middle">
                         {debt.net > 0 ? (
-                          <button className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-sm w-full">
-                            Remind
+                          <button onClick={() => onSettleUp({ payerId: friendId, payeeId: currentUserId, amount: debt.net, maxAmount: debt.net, groupId: debt.groupId })} className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-sm w-full">
+                            Record Payment
                           </button>
                         ) : (
-                          <button onClick={() => onSettleUp(friendId, debt.net, debt.groupId)} className="bg-[#007A64] text-white hover:bg-[#00604f] px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-sm w-full">
+                          <button onClick={() => onSettleUp({ payerId: currentUserId, payeeId: friendId, amount: Math.abs(debt.net), maxAmount: Math.abs(debt.net), groupId: debt.groupId })} className="bg-[#007A64] text-white hover:bg-[#00604f] px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-sm w-full">
                             Settle Up
                           </button>
                         )}

@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import clsx from 'clsx';
 import { ExpenseActivityRow, SettlementActivityRow, GroupInviteActivityRow } from './ActivityRows';
 
-export default function ActivityView({ expenses, groups, users, currentUserId, onSelectExpense }) {
+export default function ActivityView({ expenses, settlements, groups, users, currentUserId, onSelectExpense }) {
   const [filter, setFilter] = useState('All');
   
-  const activities = expenses.map(e => {
+  const expenseActivities = expenses.map(e => {
      const me = e.participants?.find(p => p.user_id === currentUserId);
      const net = (me?.amount_paid ?? 0) - (me?.amount_owed ?? 0);
      const creator = users.find(u => u.id === e.created_by) || { name: 'Someone', id: e.created_by };
@@ -30,8 +30,34 @@ export default function ActivityView({ expenses, groups, users, currentUserId, o
      };
   });
 
+  const settlementActivities = settlements.map(s => {
+     const payer = users.find(u => u.id === s.payer_id) || { name: 'Someone', id: s.payer_id };
+     const payee = users.find(u => u.id === s.payee_id) || { name: 'someone', id: s.payee_id };
+     const group = groups.find(g => g.id === s.group_id);
+     const dateObj = new Date(s.date);
+     const payerName = payer.id === currentUserId ? 'You' : payer.name;
+     const payeeName = payee.id === currentUserId ? 'you' : payee.name;
+
+     return {
+        id: `settlement-${s.id}`,
+        type: 'settlement',
+        date: dateObj,
+        user_id: payer.id,
+        userName: payerName,
+        action: `paid ${payeeName}`,
+        groupName: group?.name,
+        amount: s.amount,
+        icon: 'payments',
+        timeAgo: dateObj.toLocaleDateString(),
+        badgeColor: 'bg-[#007A64]'
+     };
+  });
+
+  const activities = [...expenseActivities, ...settlementActivities];
+
   const filtered = activities.filter(a => {
     if (filter === 'Expenses') return a.type === 'expense';
+    if (filter === 'Settlements') return a.type === 'settlement';
     if (filter === 'Groups') return a.type === 'group_invite';
     return true;
   });
@@ -79,7 +105,7 @@ export default function ActivityView({ expenses, groups, users, currentUserId, o
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
            <p className="text-gray-600 font-medium">Track your shared expenses and group interactions.</p>
            <div className="flex items-center gap-2">
-              {['All', 'Expenses', 'Groups'].map(f => (
+              {['All', 'Expenses', 'Settlements', 'Groups'].map(f => (
                  <button key={f} onClick={() => setFilter(f)} className={clsx("px-4 py-1.5 rounded-full text-sm font-bold transition-colors border", filter === f ? "bg-gray-200 border-gray-200 text-gray-900" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50")}>
                     {f}
                  </button>

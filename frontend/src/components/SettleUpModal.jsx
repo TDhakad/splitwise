@@ -3,23 +3,28 @@ import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import CustomDropdown from './CustomDropdown';
 import { avatarColor, initials } from '../lib/utils.js';
-import { API_BASE_URL, apiFetch } from '../lib/constants.js';
+import { apiFetch } from '../lib/constants.js';
 
-export default function SettleUpModal({ onClose, onSave, users, currentUserId, defaultPayeeId, defaultAmount, defaultGroupId }) {
+export default function SettleUpModal({ onClose, onSave, users, currentUserId, defaultPayerId, defaultPayeeId, defaultAmount, defaultMaxAmount, defaultGroupId }) {
+   const [payerId] = useState(defaultPayerId || currentUserId);
    const [payeeId, setPayeeId] = useState(defaultPayeeId || '');
    const [amount, setAmount] = useState(defaultAmount ? Math.abs(defaultAmount).toFixed(2) : '');
    const [method, setMethod] = useState('cash');
    const [isSubmitting, setIsSubmitting] = useState(false);
+   const maxAmount = Number(defaultMaxAmount ?? defaultAmount ?? 0);
 
-   const currentUser = users.find(u => u.id === currentUserId);
+   const payerUser = users.find(u => u.id === parseInt(payerId));
    const payeeUser = users.find(u => u.id === parseInt(payeeId));
+   const isDirectionLocked = Boolean(defaultPayerId && defaultPayeeId);
 
-   // Filter potential payees (for now, just anyone who isn't the current user)
-   const availablePayees = users.filter(u => u.id !== currentUserId);
+   const availablePayees = users.filter(u => u.id !== parseInt(payerId));
+   const parsedAmount = Number(amount);
+   const exceedsMax = maxAmount > 0 && Math.round(parsedAmount * 100) > Math.round(maxAmount * 100);
+   const canSubmit = payerId && payeeId && parseInt(payerId) !== parseInt(payeeId) && amount && !Number.isNaN(parsedAmount) && parsedAmount > 0 && !exceedsMax;
 
    const handleSubmit = async (e) => {
       e.preventDefault();
-      if (!payeeId || !amount || isNaN(amount) || Number(amount) <= 0) return;
+      if (!canSubmit) return;
 
       setIsSubmitting(true);
       try {
@@ -27,7 +32,7 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
             method: 'POST',
             body: JSON.stringify({
                group_id: defaultGroupId || null,
-               payer_id: currentUserId,
+               payer_id: parseInt(payerId),
                payee_id: parseInt(payeeId),
                amount: parseFloat(amount),
                currency: 'USD'
@@ -37,8 +42,8 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
          if (res.ok) {
             onSave();
          } else {
-            console.error('Failed to settle up');
-            alert('Failed to settle up. Please try again.');
+            const data = await res.json().catch(() => ({}));
+            alert(data.detail || 'Failed to settle up. Please try again.');
          }
       } catch (err) {
          console.error(err);
@@ -64,10 +69,10 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
                {/* From -> To Visual */}
                <div className="flex items-center justify-between bg-[#F8F9FA] p-4 rounded-xl border border-gray-100">
                   <div className="flex flex-col items-center gap-2">
-                     <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white", avatarColor(currentUserId))}>
-                        {initials(currentUser?.name || 'You')}
+                     <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white", avatarColor(parseInt(payerId)))}>
+                        {initials(payerUser?.name || 'User')}
                      </div>
-                     <span className="text-xs font-bold text-gray-600">You</span>
+                     <span className="text-xs font-bold text-gray-600">{parseInt(payerId) === currentUserId ? 'You' : payerUser?.name || 'Payer'}</span>
                   </div>
 
                   <div className="flex-1 flex items-center justify-center relative px-4">
@@ -87,12 +92,11 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
                            <MSIcon name="person" className="text-gray-400" />
                         </div>
                      )}
-                     <span className="text-xs font-bold text-gray-600">{payeeUser ? payeeUser.name : 'Select'}</span>
+                     <span className="text-xs font-bold text-gray-600">{payeeUser ? (payeeUser.id === currentUserId ? 'You' : payeeUser.name) : 'Select'}</span>
                   </div>
                </div>
 
-               {/* Payee Selection (if not locked) */}
-               {!defaultPayeeId && (
+               {!isDirectionLocked && (
                   <div>
                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Recipient</label>
                      <div className="relative">
@@ -140,6 +144,7 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
                         type="number" 
                         step="0.01"
                         min="0.01"
+                        max={maxAmount > 0 ? maxAmount.toFixed(2) : undefined}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         placeholder="0.00"
@@ -147,6 +152,11 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
                         required
                      />
                   </div>
+                  {maxAmount > 0 && (
+                     <p className={clsx("mt-2 text-xs font-bold", exceedsMax ? "text-[#D93F3C]" : "text-gray-500")}>
+                        Maximum outstanding balance: ${maxAmount.toFixed(2)}
+                     </p>
+                  )}
                </div>
 
                {/* Payment Method */}
@@ -174,7 +184,7 @@ export default function SettleUpModal({ onClose, onSave, users, currentUserId, d
                   <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
                      Cancel
                   </button>
-                  <button type="submit" disabled={isSubmitting} className="flex-1 px-4 py-3 rounded-xl font-bold text-white bg-[#007A64] hover:bg-[#00604f] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
+                  <button type="submit" disabled={isSubmitting || !canSubmit} className="flex-1 px-4 py-3 rounded-xl font-bold text-white bg-[#007A64] hover:bg-[#00604f] transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
                      {isSubmitting ? <MSIcon name="refresh" className="animate-spin" /> : <MSIcon name="check" />}
                      Record Payment
                   </button>

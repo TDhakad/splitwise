@@ -24,8 +24,12 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const selectedGroup = groupCtx || groups.find(g => g.id === parseInt(groupId));
+  const expenseUsers = selectedGroup?.members?.length
+    ? selectedGroup.members.map(member => users.find(u => u.id === member.id) || member)
+    : users;
   const total = parseFloat(amount) || 0;
-  const activeIds = users.filter(u => involvedUsers[u.id]).map(u => u.id);
+  const activeIds = expenseUsers.filter(u => involvedUsers[u.id]).map(u => u.id);
 
   const preview = (() => {
     if (splitMethod === 'equal') { const s = activeIds.length ? total / activeIds.length : 0; return activeIds.reduce((a, id) => ({ ...a, [id]: s }), {}); }
@@ -129,7 +133,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   }
 
   if (step === 'itemized-split') {
-    return <ItemizedSplitStep receiptData={receiptData} users={users} involvedUsers={involvedUsers} currentUserId={currentUserId} payerId={payerId} onSave={handleFinishItemizedSplit} onClose={onClose} onBack={() => setStep('review-receipt')} />;
+    return <ItemizedSplitStep receiptData={receiptData} users={expenseUsers} involvedUsers={involvedUsers} currentUserId={currentUserId} payerId={payerId} onSave={handleFinishItemizedSplit} onClose={onClose} onBack={() => setStep('review-receipt')} />;
   }
 
   return (
@@ -165,7 +169,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                     <MSIcon name="search" className="text-400 text-xl" />
                     <span className="text-sm text-gray-600 font-medium">
                       {activeIds.filter(id => id !== currentUserId).length > 0
-                        ? users.filter(u => involvedUsers[u.id] && u.id !== currentUserId).map(u => u.name).join(', ')
+                        ? expenseUsers.filter(u => involvedUsers[u.id] && u.id !== currentUserId).map(u => u.name).join(', ')
                         : (involvedUsers[currentUserId] ? 'Enter names or email' : 'Select friends')}
                     </span>
                   </button>
@@ -199,10 +203,10 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                       <CustomDropdown
                         value={payerId}
                         onChange={(val) => setPayerId(parseInt(val))}
-                        options={users.map(u => ({ value: u.id }))}
+                        options={expenseUsers.map(u => ({ value: u.id }))}
                         className="!w-full"
                         renderSelected={(opt) => {
-                           const u = users.find(usr => usr.id === opt.value);
+                           const u = expenseUsers.find(usr => usr.id === opt.value);
                            return (
                               <>
                                  <div className={clsx("w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-[10px]", avatarColor(opt.value))}>
@@ -213,7 +217,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                            );
                         }}
                         renderOption={(opt, isSelected) => {
-                           const u = users.find(usr => usr.id === opt.value);
+                           const u = expenseUsers.find(usr => usr.id === opt.value);
                            return (
                               <>
                                  <div className={clsx("w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs", avatarColor(opt.value))}>
@@ -269,7 +273,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                     <button onClick={() => setStep('friends')} className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 flex items-center justify-between hover:border-[#007A64] transition-colors shadow-sm">
                       <span className="text-sm text-gray-600 font-medium truncate">
                         {activeIds.length > 1
-                          ? users.filter(u => involvedUsers[u.id]).map(u => u.id === currentUserId ? 'You' : u.name).join(', ')
+                          ? expenseUsers.filter(u => involvedUsers[u.id]).map(u => u.id === currentUserId ? 'You' : u.name).join(', ')
                           : 'Select friends'}
                       </span>
                       <MSIcon name="group_add" className="text-gray-400" />
@@ -282,12 +286,12 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
           )}
 
           {step === 'friends' && (
-            <SelectFriendsStep users={users} currentUserId={currentUserId} involvedUsers={involvedUsers}
+            <SelectFriendsStep users={expenseUsers} currentUserId={currentUserId} involvedUsers={involvedUsers} listLabel={selectedGroup ? 'Group Members' : 'All Friends'}
               setInvolvedUsers={setInvolvedUsers} onBack={() => setStep('add')} onDone={() => setStep('add')} />
           )}
 
           {step === 'split' && (
-            <SplitOptionsStep users={users} currentUserId={currentUserId} total={total} activeIds={activeIds}
+            <SplitOptionsStep users={expenseUsers} currentUserId={currentUserId} total={total} activeIds={activeIds}
               splitMethod={splitMethod} setSplitMethod={setSplitMethod} customValues={customValues}
               setCustomValues={setCustomValues} preview={preview} runningSum={runningSum} pctSum={pctSum}
               validationMsg={validationMsg} onBack={() => setStep('add')} onSave={() => setStep('add')} />
@@ -299,7 +303,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   );
 }
 
-function SelectFriendsStep({ users, currentUserId, involvedUsers, setInvolvedUsers, onBack, onDone }) {
+function SelectFriendsStep({ users, currentUserId, involvedUsers, setInvolvedUsers, listLabel, onBack, onDone }) {
   const [query, setQuery] = useState('');
   const filtered = users.filter(u => {
      const nameStr = u.id === currentUserId ? `${u.name} (You)` : u.name;
@@ -324,12 +328,12 @@ function SelectFriendsStep({ users, currentUserId, involvedUsers, setInvolvedUse
       <div className="overflow-y-auto flex-1 no-scrollbar px-6 pt-6 pb-24">
         <div className="relative mb-6">
           <MSIcon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl" />
-          <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Enter a name, email, or phone"
+          <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by name or email"
             className="w-full h-12 bg-gray-100 rounded-xl pl-12 pr-4 border-none outline-none text-sm text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-[#007A64]" />
         </div>
         {Object.keys(grouped).sort().length > 0 && (
           <section>
-            <h2 className="text-xs font-bold tracking-widest uppercase text-gray-500 mb-3">All Friends</h2>
+            <h2 className="text-xs font-bold tracking-widest uppercase text-gray-500 mb-3">{listLabel}</h2>
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
               {Object.keys(grouped).sort((a,b) => a === 'Y' && grouped[a].some(u => u.id === currentUserId) ? -1 : b === 'Y' && grouped[b].some(u => u.id === currentUserId) ? 1 : a.localeCompare(b)).map(letter => (
                 <React.Fragment key={letter}>

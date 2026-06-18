@@ -7,29 +7,85 @@ import { apiFetch } from '../lib/constants';
 export default function GroupDetailView({ groupId, currentUserId, users, refreshTrigger, onRefresh, onAddExpense, onSelectExpense, onBack, onSettleUp }) {
   const [groupDetail, setGroupDetail] = useState(null);
   const [groupExpenses, setGroupExpenses] = useState([]);
+  const [groupSettlements, setGroupSettlements] = useState([]);
   const [groupBalances, setGroupBalances] = useState([]);
+  const [isTogglingSimplify, setIsTogglingSimplify] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberQuery, setMemberQuery] = useState('');
+  const [addingMemberId, setAddingMemberId] = useState(null);
+  const [memberError, setMemberError] = useState('');
   
   useEffect(() => {
     Promise.all([
       apiFetch(`/groups/${groupId}`).then(r => r.json()),
       apiFetch(`/groups/${groupId}/expenses`).then(r => r.json()),
+      apiFetch(`/groups/${groupId}/settlements`).then(r => r.json()),
       apiFetch(`/groups/${groupId}/balances`).then(r => r.json()),
-    ]).then(([g, e, b]) => { setGroupDetail(g); setGroupExpenses(e); setGroupBalances(b); });
+    ]).then(([g, e, s, b]) => { setGroupDetail(g); setGroupExpenses(e); setGroupSettlements(s); setGroupBalances(b); });
   }, [groupId, refreshTrigger]);
 
   if (!groupDetail) return <div className="flex items-center justify-center py-24 text-gray-500 font-semibold">Loading...</div>;
 
   const handleToggleSimplify = async () => {
+    if (isTogglingSimplify) return;
     const newVal = !groupDetail.simplify_debts;
+    setGroupDetail(prev => ({ ...prev, simplify_debts: newVal }));
+    setIsTogglingSimplify(true);
+
     try {
-      await apiFetch(`/groups/${groupId}/simplify?enable=${newVal}`, {
+      const res = await apiFetch(`/groups/${groupId}/simplify?enable=${newVal}`, {
         method: 'PUT'
       });
-      setGroupDetail(prev => ({ ...prev, simplify_debts: newVal }));
+      if (!res.ok) throw new Error('Failed to update simplify setting');
+
+      const balancesRes = await apiFetch(`/groups/${groupId}/balances`);
+      if (balancesRes.ok) {
+        setGroupBalances(await balancesRes.json());
+      }
+      if (onRefresh) onRefresh();
     } catch (e) {
       console.error(e);
-      // Revert on error
       setGroupDetail(prev => ({ ...prev, simplify_debts: !newVal }));
+    } finally {
+      setIsTogglingSimplify(false);
+    }
+  };
+
+  const transactions = [
+    ...groupExpenses.map(expense => ({ type: 'expense', date: expense.date, data: expense })),
+    ...groupSettlements.map(settlement => ({ type: 'settlement', date: settlement.date, data: settlement })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const groupMemberIds = new Set(groupDetail.members.map(m => m.id));
+  const addableMembers = users.filter(u =>
+    !groupMemberIds.has(u.id) &&
+    (u.name.toLowerCase().includes(memberQuery.toLowerCase()) ||
+      (u.email ?? '').toLowerCase().includes(memberQuery.toLowerCase()))
+  );
+
+  const handleAddMember = async (user) => {
+    if (addingMemberId) return;
+    setAddingMemberId(user.id);
+    setMemberError('');
+
+    try {
+      const res = await apiFetch(`/groups/${groupId}/members/${user.id}`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Failed to add member.');
+      }
+
+      setGroupDetail(prev => ({
+        ...prev,
+        members: prev.members.some(m => m.id === user.id) ? prev.members : [...prev.members, user],
+      }));
+      setShowAddMember(false);
+      setMemberQuery('');
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      setMemberError(e.message);
+    } finally {
+      setAddingMemberId(null);
     }
   };
 
@@ -54,8 +110,9 @@ export default function GroupDetailView({ groupId, currentUserId, users, refresh
             <span className="text-sm font-bold text-gray-500">Simplify Debts</span>
             <button 
                 onClick={handleToggleSimplify}
+                disabled={isTogglingSimplify}
                 className={clsx(
-                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-70",
                     groupDetail.simplify_debts ? "bg-[#007A64]" : "bg-gray-200"
                 )}
             >
@@ -70,24 +127,64 @@ export default function GroupDetailView({ groupId, currentUserId, users, refresh
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
          <div className="md:col-span-2 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
-               <h3 className="text-sm font-bold tracking-widest uppercase text-gray-500">Expenses</h3>
+               <h3 className="text-sm font-bold tracking-widest uppercase text-gray-500">Transactions</h3>
                <div className="flex items-center gap-2">
-                  <button onClick={() => onSettleUp(groupDetail)} className="flex items-center gap-2 bg-[#FEE2E2] hover:bg-[#D93F3C] hover:text-white text-[#D93F3C] text-sm font-bold px-4 py-2 rounded-lg transition-colors active:scale-95">
-                     <MSIcon name="payments" className="text-lg" /> Settle Up
-                  </button>
                   <button onClick={() => onAddExpense(groupDetail)} className="flex items-center gap-2 bg-[#EAF5F2] hover:bg-[#007A64] hover:text-white text-[#007A64] text-sm font-bold px-4 py-2 rounded-lg transition-colors active:scale-95">
                      <MSIcon name="add" className="text-lg" /> Add
                   </button>
                </div>
             </div>
-            {!groupExpenses.length
-               ? <div className="flex flex-col items-center py-16 text-gray-400"><MSIcon name="receipt_long" className="text-5xl mb-3 opacity-30" /><p>No expenses yet.</p></div>
-               : <div className="space-y-2">{groupExpenses.map(e => <ExpenseRow key={e.id} expense={e} currentUserId={currentUserId} onClick={() => onSelectExpense(e, groupDetail)} />)}</div>}
+            {!transactions.length
+               ? <div className="flex flex-col items-center py-16 text-gray-400"><MSIcon name="receipt_long" className="text-5xl mb-3 opacity-30" /><p>No transactions yet.</p></div>
+               : <div className="space-y-2">
+                  {transactions.map(t => (
+                     t.type === 'expense'
+                        ? <ExpenseRow key={`expense-${t.data.id}`} expense={t.data} currentUserId={currentUserId} onClick={() => onSelectExpense(t.data, groupDetail)} />
+                        : <SettlementRow key={`settlement-${t.data.id}`} settlement={t.data} users={users} currentUserId={currentUserId} />
+                  ))}
+               </div>}
          </div>
          
          <div className="space-y-6">
             <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm h-fit">
-               <h3 className="text-sm font-bold tracking-widest uppercase text-gray-500 mb-6">Members</h3>
+               <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-sm font-bold tracking-widest uppercase text-gray-500">Members</h3>
+                  <button onClick={() => { setShowAddMember(prev => !prev); setMemberError(''); }} className="w-8 h-8 rounded-lg bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white flex items-center justify-center transition-colors">
+                     <MSIcon name={showAddMember ? "close" : "person_add"} className="text-lg" />
+                  </button>
+               </div>
+               {showAddMember && (
+                  <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                     <div className="relative mb-3">
+                        <MSIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
+                        <input
+                           type="text"
+                           value={memberQuery}
+                           onChange={e => setMemberQuery(e.target.value)}
+                           placeholder="Search friends"
+                           className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#007A64] focus:ring-2 focus:ring-[#007A64]/10"
+                        />
+                     </div>
+                     <div className="max-h-52 overflow-y-auto space-y-1">
+                        {addableMembers.map(user => (
+                           <button key={user.id} onClick={() => handleAddMember(user)} disabled={Boolean(addingMemberId)} className="w-full flex items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-white disabled:opacity-60 transition-colors">
+                              <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm border-2 border-white', avatarColor(user.id))}>
+                                 {initials(user.name)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                 <p className="truncate text-sm font-bold text-gray-900">{user.name}</p>
+                                 <p className="truncate text-xs text-gray-500">{user.email}</p>
+                              </div>
+                              {addingMemberId === user.id ? <MSIcon name="refresh" className="animate-spin text-[#007A64]" /> : <MSIcon name="add" className="text-[#007A64]" />}
+                           </button>
+                        ))}
+                        {addableMembers.length === 0 && (
+                           <p className="px-2 py-4 text-center text-xs font-semibold text-gray-500">No available friends</p>
+                        )}
+                     </div>
+                     {memberError && <p className="mt-3 text-xs font-bold text-[#D93F3C]">{memberError}</p>}
+                  </div>
+               )}
                <div className="space-y-4">
                   {groupDetail.members.map(m => (
                      <div key={m.id} className="flex items-center gap-3">
@@ -144,9 +241,9 @@ export default function GroupDetailView({ groupId, currentUserId, users, refresh
                                     <p className={clsx("text-sm font-bold", amountColor)}>${b.amount.toFixed(2)}</p>
                                  </div>
                               </div>
-                              {isMeFrom && (
-                                 <button onClick={() => onSettleUp({ payeeId: b.to_user_id, amount: b.amount })} className="bg-[#007A64] text-white hover:bg-[#00604f] px-4 py-1.5 rounded-lg font-bold text-[11px] transition-colors shadow-sm ml-4">
-                                    Settle Up
+                              {(isMeFrom || isMeTo) && (
+                                 <button onClick={() => onSettleUp({ payerId: b.from_user_id, payeeId: b.to_user_id, amount: b.amount, maxAmount: b.amount })} className="bg-[#007A64] text-white hover:bg-[#00604f] px-4 py-1.5 rounded-lg font-bold text-[11px] transition-colors shadow-sm ml-4">
+                                    {isMeFrom ? 'Settle Up' : 'Record Payment'}
                                  </button>
                               )}
                            </div>
@@ -156,6 +253,32 @@ export default function GroupDetailView({ groupId, currentUserId, users, refresh
                )}
             </div>
          </div>
+      </div>
+    </div>
+  );
+}
+
+function SettlementRow({ settlement, users, currentUserId }) {
+  const payer = users.find(u => u.id === settlement.payer_id) || { name: 'Someone' };
+  const payee = users.find(u => u.id === settlement.payee_id) || { name: 'someone' };
+  const date = new Date(settlement.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const payerName = settlement.payer_id === currentUserId ? 'You' : payer.name;
+  const payeeName = settlement.payee_id === currentUserId ? 'you' : payee.name;
+
+  return (
+    <div className="flex items-center justify-between p-4 border border-transparent rounded-xl">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-xl bg-[#EAF5F2] flex items-center justify-center transition-colors shadow-sm">
+          <MSIcon name="payments" className="text-[#007A64] text-xl" />
+        </div>
+        <div>
+          <p className="font-bold text-gray-900 text-sm">{payerName} paid {payeeName}</p>
+          <p className="text-[12px] font-medium text-gray-500 mt-0.5">{date}</p>
+        </div>
+      </div>
+      <div className="text-right shrink-0 ml-4">
+        <p className="text-[10px] font-bold tracking-widest uppercase text-[#007A64]">settled</p>
+        <p className="font-bold text-[#007A64]">${settlement.amount.toFixed(2)}</p>
       </div>
     </div>
   );
