@@ -27,12 +27,12 @@
 #
 # 3. Change the values in the "env" block to match your values.
 
-name: 'Build and Deploy to Cloud Run'
+name: 'Build and Deploy Splitwise to Cloud Run'
 
 on:
   push:
     branches:
-      - 'main'
+      - 'master'
   workflow_dispatch:
 
 env:
