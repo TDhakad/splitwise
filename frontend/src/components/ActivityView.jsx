@@ -1,0 +1,112 @@
+import React, { useState } from 'react';
+import clsx from 'clsx';
+import { ExpenseActivityRow, SettlementActivityRow, GroupInviteActivityRow } from './ActivityRows';
+
+export default function ActivityView({ expenses, groups, users, currentUserId, onSelectExpense }) {
+  const [filter, setFilter] = useState('All');
+  
+  const activities = expenses.map(e => {
+     const me = e.participants?.find(p => p.user_id === currentUserId);
+     const net = (me?.amount_paid ?? 0) - (me?.amount_owed ?? 0);
+     const creator = users.find(u => u.id === e.created_by) || { name: 'Someone', id: e.created_by };
+     const group = groups.find(g => g.id === e.group_id);
+     
+     const dateObj = new Date(e.date);
+     
+     return {
+        id: `exp-${e.id}`,
+        expenseObj: e,
+        type: 'expense',
+        date: dateObj,
+        user_id: creator.id,
+        userName: creator.id === currentUserId ? 'You' : creator.name,
+        action: 'added',
+        item: e.description,
+        groupName: group?.name,
+        net: net,
+        icon: 'receipt_long',
+        timeAgo: dateObj.toLocaleDateString(),
+        badgeColor: 'bg-[#007A64]'
+     };
+  });
+
+  const filtered = activities.filter(a => {
+    if (filter === 'Expenses') return a.type === 'expense';
+    if (filter === 'Groups') return a.type === 'group_invite';
+    return true;
+  });
+
+  filtered.sort((a, b) => b.date - a.date);
+
+  const todayStr = new Date().toDateString();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayStr = yesterdayDate.toDateString();
+
+  const grouped = {};
+  filtered.forEach(a => {
+     const dStr = a.date.toDateString();
+     let label = dStr;
+     if (dStr === todayStr) label = 'Today';
+     else if (dStr === yesterdayStr) label = 'Yesterday';
+     else label = a.date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+     
+     if (!grouped[label]) grouped[label] = [];
+     grouped[label].push(a);
+  });
+
+  // Maintain order of groups
+  const groupOrder = Array.from(new Set(filtered.map(a => {
+     const dStr = a.date.toDateString();
+     if (dStr === todayStr) return 'Today';
+     if (dStr === yesterdayStr) return 'Yesterday';
+     return a.date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  })));
+
+  const renderRow = (activity) => {
+     if (activity.type === 'expense') {
+        return <ExpenseActivityRow key={activity.id} activity={activity} users={users} currentUserId={currentUserId} onClick={() => onSelectExpense(activity.expenseObj)} />;
+     }
+     if (activity.type === 'settlement') return <SettlementActivityRow key={activity.id} activity={activity} users={users} currentUserId={currentUserId} />;
+     if (activity.type === 'group_invite') return <GroupInviteActivityRow key={activity.id} activity={activity} users={users} currentUserId={currentUserId} />;
+     return null;
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-8 h-full overflow-y-auto">
+      <div className="mb-10">
+        <h2 className="text-[28px] font-bold text-gray-900 mb-2">Recent Activity</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+           <p className="text-gray-600 font-medium">Track your shared expenses and group interactions.</p>
+           <div className="flex items-center gap-2">
+              {['All', 'Expenses', 'Groups'].map(f => (
+                 <button key={f} onClick={() => setFilter(f)} className={clsx("px-4 py-1.5 rounded-full text-sm font-bold transition-colors border", filter === f ? "bg-gray-200 border-gray-200 text-gray-900" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50")}>
+                    {f}
+                 </button>
+              ))}
+           </div>
+        </div>
+      </div>
+
+      <div className="space-y-8">
+        {groupOrder.length === 0 && <p className="text-gray-500 text-center py-10">No activity found.</p>}
+        {groupOrder.map(label => (
+          <section key={label}>
+             <h3 className="text-xs font-bold tracking-widest uppercase text-gray-900 mb-4 ml-1">{label}</h3>
+             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-100">
+                {grouped[label].map(renderRow)}
+             </div>
+          </section>
+        ))}
+      </div>
+
+      {groupOrder.length > 0 && (
+         <div className="mt-8 flex justify-center pb-12">
+            <button className="px-6 py-2.5 bg-white border border-gray-300 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+               Load More Activity
+            </button>
+         </div>
+      )}
+    </div>
+  );
+}
