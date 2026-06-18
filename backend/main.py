@@ -83,10 +83,18 @@ async def scan_receipt(file: UploadFile = File(...)):
         os.remove(temp_pdf_path)
         os.remove(temp_png.name)
         
-        # Override file object with PNG for upload
-        file.file = BytesIO(img_bytes)
-        file.filename = file.filename.rsplit('.', 1)[0] + '.png'
-        file.content_type = 'image/png'
+        # Override file object with PNG for upload using a simple mock class
+        class ProcessedFile:
+            def __init__(self, filename, file_obj, content_type):
+                self.filename = filename
+                self.file = file_obj
+                self.content_type = content_type
+
+        file = ProcessedFile(
+            file.filename.rsplit('.', 1)[0] + '.png',
+            BytesIO(img_bytes),
+            'image/png'
+        )
         file_bytes = img_bytes
     else:
         file.file.seek(0)
