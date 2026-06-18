@@ -45,7 +45,14 @@ def get_db():
 
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-storage_backend = LocalStorage("uploads")
+from .storage import LocalStorage, FirebaseStorage
+import os
+
+firebase_bucket = os.getenv("FIREBASE_STORAGE_BUCKET")
+if firebase_bucket:
+    storage_backend = FirebaseStorage(firebase_bucket)
+else:
+    storage_backend = LocalStorage("uploads")
 
 @app.get("/")
 def read_root():
@@ -53,28 +60,44 @@ def read_root():
 
 @app.post("/receipts/scan")
 async def scan_receipt(file: UploadFile = File(...)):
-    # Save the file
-    file_url = storage_backend.save(file)
-    file_path = f".{file_url}"
+    import tempfile
+    import os
+    from io import BytesIO
+    
+    file_bytes = await file.read()
     
     # If PDF, convert first page to image
     if file.filename.lower().endswith('.pdf') or file.content_type == 'application/pdf':
-        doc = fitz.open(file_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            temp_pdf.write(file_bytes)
+            temp_pdf_path = temp_pdf.name
+            
+        doc = fitz.open(temp_pdf_path)
         page = doc.load_page(0)  # load first page
         pix = page.get_pixmap()
         
-        # Save as PNG
-        img_path = file_path.rsplit('.', 1)[0] + '.png'
-        pix.save(img_path)
-        doc.close()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_png:
+            pix.save(temp_png.name)
+            with open(temp_png.name, "rb") as f:
+                img_bytes = f.read()
+                
+        # Cleanup
+        os.remove(temp_pdf_path)
+        os.remove(temp_png.name)
         
-        # Use the image for processing and as the return URL
-        file_path = img_path
-        file_url = file_url.rsplit('.', 1)[0] + '.png'
+        # Override file object with PNG for upload
+        file.file = BytesIO(img_bytes)
+        file.filename = file.filename.rsplit('.', 1)[0] + '.png'
+        file.content_type = 'image/png'
+        file_bytes = img_bytes
+    else:
+        file.file.seek(0)
+        
+    # Save the file (works for both local and GCS)
+    file_url = storage_backend.save(file)
     
-    # Read the file for base64
-    with open(file_path, "rb") as f:
-        base64_image = base64.b64encode(f.read()).decode("utf-8")
+    # Process for base64
+    base64_image = base64.b64encode(file_bytes).decode("utf-8")
         
     try:
         parsed_receipt = process_receipt_image(base64_image)
@@ -723,3 +746,20 @@ def get_expense_audit_logs(expense_id: int, current_user: models.User = Depends(
         models.AuditLog.target_id == expense_id
     ).order_by(models.AuditLog.timestamp.asc()).all()
     return logs
+
+# --- Frontend Serving (Must be at the very bottom) ---
+from fastapi.responses import FileResponse
+import os
+
+os.makedirs("frontend/dist", exist_ok=True)
+
+# Mount the static assets directory specifically so they don't hit the catch-all
+os.makedirs("frontend/dist/assets", exist_ok=True)
+app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    path = os.path.join("frontend/dist", full_path)
+    if os.path.isfile(path):
+        return FileResponse(path)
+    return FileResponse("frontend/dist/index.html")

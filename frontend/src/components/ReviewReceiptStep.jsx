@@ -60,12 +60,12 @@ export default function ReviewReceiptStep({ receiptImage, receiptData, setReceip
               <div className="max-w-md w-full">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-bold text-gray-900">Scanned Receipt</h2>
-                  <a href={`${API_BASE_URL}${receiptImage}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#007A64] flex items-center gap-1 hover:underline">
+                  <a href={receiptImage.startsWith('http') ? receiptImage : `${API_BASE_URL}${receiptImage}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#007A64] flex items-center gap-1 hover:underline">
                     <MSIcon name="zoom_in" style={{ fontSize: 16 }} /> View Original
                   </a>
                 </div>
                 {receiptImage ? (
-                  <img src={`${API_BASE_URL}${receiptImage}`} alt="Receipt" className="w-full rounded-xl shadow-md border border-gray-200" />
+                  <img src={receiptImage.startsWith('http') ? receiptImage : `${API_BASE_URL}${receiptImage}`} alt="Receipt" className="w-full rounded-xl shadow-md border border-gray-200" />
                 ) : (
                   <div className="w-full h-96 bg-gray-200 animate-pulse rounded-xl" />
                 )}
