@@ -1,7 +1,7 @@
 import datetime
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import event, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +54,16 @@ async def require_group_expense_participants(
         raise HTTPException(status_code=400, detail="Group expenses can only include group members.")
 
 
+async def require_expense_access(db: AsyncSession, expense: models.Expense, current_user_id: int) -> None:
+    if expense.group_id:
+        await require_group_member(db, expense.group_id, current_user_id)
+        return
+
+    participant_ids = {participant.user_id for participant in expense.participants}
+    if current_user_id != expense.created_by and current_user_id not in participant_ids:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
 @router.post("/expenses/", response_model=schemas.Expense)
 async def create_expense(
     expense: schemas.ExpenseCreate,
@@ -98,6 +108,24 @@ async def create_expense(
 
     reloaded = await get_expense_with_details(db, db_expense.id)
     return schemas.Expense.model_validate(reloaded)
+
+
+@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_expense(
+    expense_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    db_expense = await get_expense_with_details(db, expense_id)
+    if not db_expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    await require_expense_access(db, db_expense, current_user.id)
+    group_id = db_expense.group_id
+    await db.delete(db_expense)
+    await db.flush()
+    await rebuild_balances(db, group_id)
+    await db.commit()
 
 
 @router.put("/expenses/{expense_id}", response_model=schemas.Expense)
@@ -363,12 +391,7 @@ async def get_expense_audit_logs(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    if expense.group_id:
-        await require_group_member(db, expense.group_id, current_user.id)
-    else:
-        participant_ids = {participant.user_id for participant in expense.participants}
-        if current_user.id != expense.created_by and current_user.id not in participant_ids:
-            raise HTTPException(status_code=403, detail="Not authorized")
+    await require_expense_access(db, expense, current_user.id)
 
     logs_result = await db.execute(
         select(models.AuditLog)

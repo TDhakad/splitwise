@@ -155,6 +155,11 @@ export default function App() {
     invalidateFinancialQueries();
   };
 
+  const handleExpenseDeleted = () => {
+    setShowEditExpense(false);
+    setSelectedExpenseCtx(null);
+  };
+
   const handleSettleUpSaved = () => {
     setSettleUpCtx(null);
     invalidateFinancialQueries();
@@ -243,11 +248,11 @@ export default function App() {
                   
                   {activeTab === 'preplanning' && (
                      <div className={!selectedExpenseCtx ? 'h-full w-full' : 'hidden'}>
-                        <PreplanningHub onAddExpense={(plan: Plan) => openExpenseModal(null, plan)} onSelectExpense={(exp: ExpenseWithCreator) => setSelectedExpenseCtx({ expense: exp, from: 'preplanning' })} />
+                        <PreplanningHub currentUserId={currentUser.id} onAddExpense={(plan: Plan) => openExpenseModal(null, plan)} onSelectExpense={(exp: ExpenseWithCreator) => setSelectedExpenseCtx({ expense: exp, from: 'preplanning' })} />
                      </div>
                   )}
 
-                  {selectedExpenseCtx && selectedExpense && <ExpenseDetailView expense={selectedExpense} context={selectedExpenseCtx} users={users} currentUserId={currentUser.id} onEdit={() => setShowEditExpense(true)} onBack={() => setSelectedExpenseCtx(null)} />}
+                  {selectedExpenseCtx && selectedExpense && <ExpenseDetailView expense={selectedExpense} context={selectedExpenseCtx} users={users} currentUserId={currentUser.id} onEdit={() => setShowEditExpense(true)} onBack={() => setSelectedExpenseCtx(null)} onDeleted={handleExpenseDeleted} />}
                </>
             )}
          </main>
@@ -256,7 +261,7 @@ export default function App() {
       {/* Modals */}
       {showAddExpense && <AddExpenseFlow users={users} groups={groups} currentUserId={currentUser.id} groupCtx={expenseGroupCtx} planCtx={expensePlanCtx} onClose={() => setShowAddExpense(false)} onSave={handleAddExpenseSaved} />}
       {showCreateGroup && <CreateGroupModal users={users} currentUserId={currentUser.id} onClose={() => setShowCreateGroup(false)} onSave={handleCreateGroupSaved} />}
-      {showEditExpense && selectedExpense && <EditExpenseModal expense={selectedExpense} users={users} currentUserId={currentUser.id} onClose={() => setShowEditExpense(false)} onSave={handleEditExpenseSaved} />}
+      {showEditExpense && selectedExpense && <EditExpenseModal expense={selectedExpense} users={users} currentUserId={currentUser.id} onClose={() => setShowEditExpense(false)} onSave={handleEditExpenseSaved} onDeleted={handleExpenseDeleted} />}
       {settleUpCtx && <SettleUpModal users={users} currentUserId={currentUser.id} defaultPayerId={settleUpCtx.payerId} defaultPayeeId={settleUpCtx.payeeId} defaultAmount={settleUpCtx.amount} defaultMaxAmount={settleUpCtx.maxAmount} defaultGroupId={settleUpCtx.groupId} onClose={() => setSettleUpCtx(null)} onSave={handleSettleUpSaved} />}
     </div>
   );

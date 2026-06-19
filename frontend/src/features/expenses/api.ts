@@ -62,6 +62,11 @@ interface UpdateExpenseVariables extends ExpenseWriteVariables {
   expenseId: number;
 }
 
+interface DeleteExpenseVariables {
+  currentUserId: number;
+  expense: ExpenseWithCreator;
+}
+
 export function useUpdateExpense() {
   const queryClient = useQueryClient();
 
@@ -82,6 +87,30 @@ export function useUpdateExpense() {
       if (payload.plan_id) {
         queryClient.invalidateQueries({ queryKey: plansKeys.list() });
         queryClient.invalidateQueries({ queryKey: plansKeys.detail(payload.plan_id) });
+      }
+    },
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation<null, ApiError, DeleteExpenseVariables>({
+    mutationFn: ({ expense }) => apiJson<null>(`/expenses/${expense.id}`, {
+      method: 'DELETE',
+    }),
+    onSuccess: (_, { currentUserId, expense }) => {
+      queryClient.invalidateQueries({ queryKey: expensesKeys.user(currentUserId) });
+      queryClient.removeQueries({ queryKey: expensesKeys.audit(expense.id) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.raw(currentUserId) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.summary(currentUserId) });
+      if (expense.group_id) {
+        queryClient.invalidateQueries({ queryKey: groupsKeys.expenses(expense.group_id) });
+        queryClient.invalidateQueries({ queryKey: groupsKeys.balances(expense.group_id) });
+      }
+      if (expense.plan_id) {
+        queryClient.invalidateQueries({ queryKey: plansKeys.list() });
+        queryClient.invalidateQueries({ queryKey: plansKeys.detail(expense.plan_id) });
       }
     },
   });

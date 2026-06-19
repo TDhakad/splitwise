@@ -8,19 +8,25 @@ interface PlanHeaderSectionProps {
   trackedGroups: GroupWithOptionalAvatar[];
   onBack: () => void;
   onAddExpense: () => void;
+  onEditPlan: () => void;
   onOpenGroups: () => void;
 }
 
-export default function PlanHeaderSection({ plan, durationDays, trackedGroups, onBack, onAddExpense, onOpenGroups }: PlanHeaderSectionProps) {
+export default function PlanHeaderSection({ plan, durationDays, trackedGroups, onBack, onAddExpense, onEditPlan, onOpenGroups }: PlanHeaderSectionProps) {
   return (
     <>
       <div className="flex items-center justify-between mb-6">
         <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">
           <MSIcon name="arrow_back" className="text-[18px]" /> Back to Dashboard
         </button>
-        <button onClick={onAddExpense} className="bg-[#007A64] hover:bg-[#00604f] text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
-          <MSIcon name="add" className="text-[18px]" /> Add Expense
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onEditPlan} className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
+            <MSIcon name="edit" className="text-[18px]" /> Edit
+          </button>
+          <button onClick={onAddExpense} className="bg-[#007A64] hover:bg-[#00604f] text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
+            <MSIcon name="add" className="text-[18px]" /> Add Expense
+          </button>
+        </div>
       </div>
 
       <div className="mb-10 flex flex-col md:flex-row md:justify-between md:items-end gap-4">

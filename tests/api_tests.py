@@ -319,6 +319,98 @@ async def test_group_expense_rebuilds_non_simplified_balances(client: AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_delete_group_expense_removes_it_and_rebuilds_balances(client: AsyncClient):
+    headers = await auth_headers(client)
+    await client.post(
+        "/auth/register",
+        json={"email": "blair@example.com", "name": "Blair User", "password": "password123"},
+    )
+    group_response = await client.post("/groups/", headers=headers, json={"name": "Trip"})
+    assert group_response.status_code == 200, group_response.text
+    group_id = group_response.json()["id"]
+    add_member_response = await client.post(f"/groups/{group_id}/members/2", headers=headers)
+    assert add_member_response.status_code == 200, add_member_response.text
+
+    first_expense_response = await client.post(
+        "/expenses/",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "description": "Hotel",
+            "total_amount": 100,
+            "currency": "USD",
+            "participants": [
+                {"user_id": 1, "amount_paid": 100, "amount_owed": 50},
+                {"user_id": 2, "amount_paid": 0, "amount_owed": 50},
+            ],
+        },
+    )
+    assert first_expense_response.status_code == 200, first_expense_response.text
+    second_expense_response = await client.post(
+        "/expenses/",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "description": "Taxi",
+            "total_amount": 40,
+            "currency": "USD",
+            "participants": [
+                {"user_id": 1, "amount_paid": 40, "amount_owed": 20},
+                {"user_id": 2, "amount_paid": 0, "amount_owed": 20},
+            ],
+        },
+    )
+    assert second_expense_response.status_code == 200, second_expense_response.text
+
+    delete_response = await client.delete(
+        f"/expenses/{first_expense_response.json()['id']}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 204, delete_response.text
+
+    expenses_response = await client.get("/users/1/expenses", headers=headers)
+    assert expenses_response.status_code == 200, expenses_response.text
+    expenses = expenses_response.json()
+    assert [expense["description"] for expense in expenses] == ["Taxi"]
+
+    balances_response = await client.get("/balances/1", headers=headers)
+    assert balances_response.status_code == 200, balances_response.text
+    balances = balances_response.json()
+    assert len(balances) == 1
+    assert balances[0]["amount"] == 20
+
+
+@pytest.mark.asyncio
+async def test_delete_expense_rejects_unrelated_user(client: AsyncClient):
+    alex_headers = await auth_headers(client)
+    blair_headers = await auth_headers(client, "blair@example.com")
+
+    expense_response = await client.post(
+        "/expenses/",
+        headers=alex_headers,
+        json={
+            "description": "Personal",
+            "total_amount": 12,
+            "currency": "USD",
+            "participants": [
+                {"user_id": 1, "amount_paid": 12, "amount_owed": 12},
+            ],
+        },
+    )
+    assert expense_response.status_code == 200, expense_response.text
+
+    delete_response = await client.delete(
+        f"/expenses/{expense_response.json()['id']}",
+        headers=blair_headers,
+    )
+    assert delete_response.status_code == 403
+
+    expenses_response = await client.get("/users/1/expenses", headers=alex_headers)
+    assert expenses_response.status_code == 200, expenses_response.text
+    assert len(expenses_response.json()) == 1
+
+
+@pytest.mark.asyncio
 async def test_plan_cannot_track_group_user_cannot_access(client: AsyncClient):
     alex_headers = await auth_headers(client)
     blair_headers = await auth_headers(client, "blair@example.com")

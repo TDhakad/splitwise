@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AddGroupModal from './AddGroupModal';
+import EditPlanModal from './EditPlanModal';
 import LoadingState from '../ui/LoadingState';
 import ErrorState from '../ui/ErrorState';
 import PlanAllocations from './PlanAllocations';
@@ -7,19 +8,37 @@ import PlanHeaderSection from './PlanHeaderSection';
 import PlanMetrics from './PlanMetrics';
 import PlanPredecisionsPanel from './PlanPredecisionsPanel';
 import { planCategories } from './planDetailUtils';
+import { useUpdateExpense } from '../../features/expenses/api';
 import { useGroups } from '../../features/groups/api';
 import { useCreatePredecision, usePlan, useUpdateAllocations, useUpdatePlanGroups } from '../../features/preplanning/api';
-import type { ExpenseCategory, ExpenseWithCreator, Plan, PlanAllocationCreate } from '../../types/api';
+import type { ExpenseCategory, ExpenseCreate, ExpenseWithCreator, Plan, PlanAllocationCreate } from '../../types/api';
 import type { ExpandedAllocation } from './planDetailUtils';
 import type { GroupWithOptionalAvatar, PlanNavigationProps } from '../../types/ui';
 
 interface PlanDetailProps extends PlanNavigationProps {
   planId: number | null;
+  currentUserId: number;
   onAddExpense: (plan: Plan) => void;
   onSelectExpense: (expense: ExpenseWithCreator) => void;
 }
 
-export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectExpense }: PlanDetailProps) {
+const buildExpenseCategoryPayload = (expense: ExpenseWithCreator, category: ExpenseCategory): ExpenseCreate => ({
+  group_id: expense.group_id,
+  plan_id: expense.plan_id ?? null,
+  description: expense.description,
+  total_amount: expense.total_amount,
+  currency: 'USD',
+  date: expense.date,
+  category,
+  has_receipt: expense.has_receipt ?? false,
+  participants: expense.participants.map(participant => ({
+    user_id: participant.user_id,
+    amount_paid: participant.amount_paid,
+    amount_owed: participant.amount_owed,
+  })),
+});
+
+export default function PlanDetail({ planId, currentUserId, onNavigate, onAddExpense, onSelectExpense }: PlanDetailProps) {
   const [newPredTitle, setNewPredTitle] = useState('');
   const [newPredCategory, setNewPredCategory] = useState<ExpenseCategory>('General');
   const [newPredAmount, setNewPredAmount] = useState('');
@@ -27,14 +46,17 @@ export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectE
   const [showAddAlloc, setShowAddAlloc] = useState(false);
   const [newAllocCategory, setNewAllocCategory] = useState<ExpenseCategory>('Dining');
   const [newAllocAmount, setNewAllocAmount] = useState('');
+  const [allocationError, setAllocationError] = useState('');
   const [expandedAllocation, setExpandedAllocation] = useState<ExpandedAllocation>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showEditPlan, setShowEditPlan] = useState(false);
 
   const planQuery = usePlan(planId);
   const groupsQuery = useGroups();
   const createPredecision = useCreatePredecision(planId);
   const updateAllocations = useUpdateAllocations(planId);
   const updatePlanGroups = useUpdatePlanGroups(planId);
+  const updateExpense = useUpdateExpense();
   const groups = groupsQuery.data ?? [];
 
   if (planQuery.isPending) return <LoadingState label="Loading plan details..." />;
@@ -68,6 +90,11 @@ export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectE
 
   const handleAddAllocation = async () => {
     if (!newAllocAmount) return;
+    setAllocationError('');
+    if (plan.allocations.some(allocation => allocation.category === newAllocCategory)) {
+      setAllocationError(`${newAllocCategory} already has an allocation.`);
+      return;
+    }
     const currentAllocs: PlanAllocationCreate[] = plan.allocations.map(a => ({
       category: a.category,
       allocated_amount: a.allocated_amount
@@ -81,6 +108,49 @@ export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectE
       await updateAllocations.mutateAsync(currentAllocs);
       setShowAddAlloc(false);
       setNewAllocAmount('');
+    } catch(e) { console.error(e); }
+  };
+
+  const hasDuplicateAllocationCategory = (allocations: PlanAllocationCreate[]) => {
+    const categories = allocations.map(allocation => allocation.category);
+    return new Set(categories).size !== categories.length;
+  };
+
+  const handleUpdateAllocation = async (allocationId: number, category: ExpenseCategory, amountText: string) => {
+    const nextAllocs = plan.allocations.map(allocation => (
+      allocation.id === allocationId
+        ? { category, allocated_amount: Math.round(Number(amountText.replace(/,/g, '')) * 100) }
+        : { category: allocation.category, allocated_amount: allocation.allocated_amount }
+    ));
+    if (hasDuplicateAllocationCategory(nextAllocs)) {
+      setAllocationError(`${category} already has an allocation.`);
+      return;
+    }
+
+    setAllocationError('');
+    try {
+      await updateAllocations.mutateAsync(nextAllocs);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleDeleteAllocation = async (allocationId: number) => {
+    setAllocationError('');
+    try {
+      await updateAllocations.mutateAsync(
+        plan.allocations
+          .filter(allocation => allocation.id !== allocationId)
+          .map(allocation => ({ category: allocation.category, allocated_amount: allocation.allocated_amount }))
+      );
+    } catch(e) { console.error(e); }
+  };
+
+  const handleMoveExpenseCategory = async (expense: ExpenseWithCreator, category: ExpenseCategory) => {
+    try {
+      await updateExpense.mutateAsync({
+        expenseId: expense.id,
+        currentUserId,
+        payload: buildExpenseCategoryPayload(expense, category),
+      });
     } catch(e) { console.error(e); }
   };
 
@@ -99,8 +169,16 @@ export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectE
         trackedGroups={trackedGroups}
         onBack={() => onNavigate('dashboard')}
         onAddExpense={() => onAddExpense(plan)}
+        onEditPlan={() => setShowEditPlan(true)}
         onOpenGroups={() => setIsModalOpen(true)}
       />
+      {showEditPlan && (
+        <EditPlanModal
+          plan={plan}
+          groups={groups}
+          onClose={() => setShowEditPlan(false)}
+        />
+      )}
       <AddGroupModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -118,10 +196,15 @@ export default function PlanDetail({ planId, onNavigate, onAddExpense, onSelectE
           newAllocAmount={newAllocAmount}
           expandedAllocation={expandedAllocation}
           isUpdatingAllocations={updateAllocations.isPending}
+          isMovingCategory={updateExpense.isPending}
+          allocationError={allocationError}
           onSelectExpense={onSelectExpense}
           onToggleAddAlloc={() => setShowAddAlloc(!showAddAlloc)}
           onToggleAllocation={toggleAllocation}
           onAddAllocation={handleAddAllocation}
+          onUpdateAllocation={handleUpdateAllocation}
+          onDeleteAllocation={handleDeleteAllocation}
+          onMoveExpenseCategory={handleMoveExpenseCategory}
           setNewAllocCategory={setNewAllocCategory}
           setNewAllocAmount={setNewAllocAmount}
         />

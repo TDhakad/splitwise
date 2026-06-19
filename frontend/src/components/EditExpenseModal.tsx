@@ -2,6 +2,7 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import CustomDropdown from './CustomDropdown';
+import ExpenseDeleteDialog from './ExpenseDeleteDialog';
 import ReceiptPanel from './EditExpense/ReceiptPanel';
 import SplitEditor from './EditExpense/SplitEditor';
 import { avatarColor, initials } from '../lib/utils';
@@ -18,6 +19,7 @@ interface EditExpenseModalProps {
   currentUserId: number;
   onClose: () => void;
   onSave: () => void;
+  onDeleted: () => void;
 }
 
 interface CategoryOption {
@@ -26,7 +28,8 @@ interface CategoryOption {
   icon: string;
 }
 
-export default function EditExpenseModal({ expense, users, currentUserId, onClose, onSave }: EditExpenseModalProps) {
+export default function EditExpenseModal({ expense, users, currentUserId, onClose, onSave, onDeleted }: EditExpenseModalProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [description, setDescription] = useState(expense.description || '');
   const [amount, setAmount] = useState((expense.total_amount || 0).toString());
   const [date, setDate] = useState(expense.date ? expense.date.split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -264,13 +267,21 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
           </div>
 
           <div className="mt-8 flex justify-center">
-            <button className="flex items-center gap-2 text-[#D93F3C] font-bold text-sm hover:underline px-4 py-2">
+            <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 text-[#D93F3C] font-bold text-sm hover:underline px-4 py-2">
               <MSIcon name="delete_outline" className="text-lg" />
               Delete Expense
             </button>
           </div>
         </div>
       </div>
+      {showDeleteConfirm && (
+        <ExpenseDeleteDialog
+          expense={expense}
+          currentUserId={currentUserId}
+          onClose={() => setShowDeleteConfirm(false)}
+          onDeleted={onDeleted}
+        />
+      )}
     </div>
   );
 }

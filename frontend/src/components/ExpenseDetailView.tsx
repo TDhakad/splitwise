@@ -1,6 +1,7 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
+import ExpenseDeleteDialog from './ExpenseDeleteDialog';
 import { avatarColor, initials } from '../lib/utils';
 import { useExpenseAudit } from '../features/expenses/api';
 import type { ExpenseWithCreator, User } from '../types/api';
@@ -13,9 +14,11 @@ interface ExpenseDetailViewProps {
    currentUserId: number;
    onBack: () => void;
    onEdit: (expense: ExpenseWithCreator) => void;
+   onDeleted: () => void;
 }
 
-export default function ExpenseDetailView({ expense, context, users, currentUserId, onBack, onEdit }: ExpenseDetailViewProps) {
+export default function ExpenseDetailView({ expense, context, users, currentUserId, onBack, onEdit, onDeleted }: ExpenseDetailViewProps) {
+   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
    const auditQuery = useExpenseAudit(expense?.id);
    const auditLogs = auditQuery.data ?? [];
 
@@ -69,7 +72,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
          <div className="flex items-end justify-between mb-8">
             <h1 className="text-[40px] font-bold text-gray-900 leading-none tracking-tight">{expense.description}</h1>
             <div className="flex gap-3">
-               <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm">
+               <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm">
                   <MSIcon name="delete" className="text-lg" /> Delete
                </button>
                <button onClick={() => onEdit(expense)} className="flex items-center gap-2 px-5 py-2.5 bg-[#007A64] text-white rounded-lg text-sm font-bold hover:bg-[#00604f] transition-colors shadow-sm">
@@ -224,6 +227,14 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                </div>
             </div>
          </div>
+         {showDeleteConfirm && (
+            <ExpenseDeleteDialog
+               expense={expense}
+               currentUserId={currentUserId}
+               onClose={() => setShowDeleteConfirm(false)}
+               onDeleted={onDeleted}
+            />
+         )}
       </div>
    );
 }

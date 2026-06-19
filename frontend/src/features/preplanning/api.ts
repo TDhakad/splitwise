@@ -8,6 +8,7 @@ import type {
   PlanDetail,
   PlanPredecision,
   PlanPredecisionCreate,
+  PlanUpdate,
   Group,
 } from '../../types/api';
 
@@ -44,6 +45,21 @@ export function useCreatePlan() {
       body: JSON.stringify(payload),
     }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: plansKeys.list() });
+    },
+  });
+}
+
+export function useUpdatePlan(planId: number | null | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation<Plan, ApiError, PlanUpdate>({
+    mutationFn: (payload) => apiJson<Plan>(`/api/v1/preplanning/plans/${planId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: plansKeys.detail(planId) });
       queryClient.invalidateQueries({ queryKey: plansKeys.list() });
     },
   });
