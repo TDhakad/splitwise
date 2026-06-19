@@ -1,6 +1,15 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Literal, Optional
 from datetime import datetime
+from enum import Enum
+
+class ExpenseCategory(str, Enum):
+    DINING = "Dining"
+    ACCOMMODATION = "Accommodation"
+    TRANSPORT = "Transport"
+    GROCERIES = "Groceries"
+    ENTERTAINMENT = "Entertainment"
+    GENERAL = "General"
 
 # Users
 class UserBase(BaseModel):
@@ -68,11 +77,12 @@ class ExpenseParticipantBase(BaseModel):
 
 class ExpenseCreate(BaseModel):
     group_id: Optional[int] = None
+    plan_id: Optional[int] = None
     description: str = Field(min_length=1)
     total_amount: float = Field(gt=0)
     currency: Literal["USD"] = "USD"
     date: Optional[datetime] = None
-    category: Optional[str] = None
+    category: Optional[ExpenseCategory] = ExpenseCategory.GENERAL
     has_receipt: Optional[bool] = False
     participants: List[ExpenseParticipantBase] = Field(min_length=1)
 
@@ -84,6 +94,7 @@ class ExpenseParticipant(ExpenseParticipantBase):
 class Expense(BaseModel):
     id: int
     group_id: Optional[int]
+    plan_id: Optional[int] = None
     created_by: int
     description: str
     total_amount: float
@@ -150,3 +161,71 @@ class FriendshipWithUsers(Friendship):
     addressee: User
     class Config:
         from_attributes = True
+
+# Preplanning
+class PlanAllocationBase(BaseModel):
+    category: ExpenseCategory
+    allocated_amount: int # In cents
+
+class PlanAllocationCreate(PlanAllocationBase):
+    pass
+
+class PlanAllocation(PlanAllocationBase):
+    id: int
+    plan_id: int
+    class Config:
+        from_attributes = True
+
+class PlanPredecisionBase(BaseModel):
+    title: str
+    category: ExpenseCategory
+    expected_amount: int # In cents
+    status: Literal["expected", "realized"] = "expected"
+
+class PlanPredecisionCreate(PlanPredecisionBase):
+    pass
+
+class PlanPredecision(PlanPredecisionBase):
+    id: int
+    plan_id: int
+    class Config:
+        from_attributes = True
+
+class PlanBase(BaseModel):
+    name: str = Field(min_length=1)
+    start_date: datetime
+    end_date: datetime
+    total_budget: int # In cents
+    status: Literal["draft", "active", "completed"] = "draft"
+    type: Literal["trip", "monthly_budget", "custom"] = "custom"
+    group_id: Optional[int] = None
+
+class PlanCreate(PlanBase):
+    pass
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    total_budget: Optional[int] = None
+    status: Optional[Literal["draft", "active", "completed"]] = None
+    type: Optional[Literal["trip", "monthly_budget", "custom"]] = None
+    group_id: Optional[int] = None
+
+class Plan(PlanBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    total_spent: int = 0
+
+    class Config:
+        from_attributes = True
+
+class PlanDetail(Plan):
+    allocations: List[PlanAllocation] = []
+    predecisions: List[PlanPredecision] = []
+    tracked_groups: List[Group] = []
+    expenses: List[ExpenseWithCreator] = []
+    total_allocated: int = 0
+    allocations_spent: dict[str, int] = {} # Map category name to spent amount in cents
