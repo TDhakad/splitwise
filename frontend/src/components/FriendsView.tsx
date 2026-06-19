@@ -22,12 +22,14 @@ interface FriendsViewProps {
   balances: TotalsBalanceSummary;
   currentUserId: number;
   onSettleUp: (options: SettleUpContext) => void;
-  onSelectFriend: (friendId: number) => void;
 }
 
 type FriendRequestStatus = 'ACCEPTED' | 'REJECTED' | 'REMOVED';
 
-export default function FriendsView({ users, rawBalances, balances, currentUserId, onSettleUp, onSelectFriend }: FriendsViewProps) {
+import { useNavigate } from 'react-router-dom';
+
+export default function FriendsView({ users, rawBalances, balances, currentUserId, onSettleUp }: FriendsViewProps) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   
   // Add Friend Modal State
@@ -204,7 +206,7 @@ export default function FriendsView({ users, rawBalances, balances, currentUserI
               {filteredFriends.map(f => (
                  <tr 
                     key={f.id} 
-                    onClick={() => onSelectFriend && onSelectFriend(f.id)}
+                    onClick={() => navigate(`/friends/${f.id}`)}
                     className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
                  >
                     <td className="px-6 py-4">

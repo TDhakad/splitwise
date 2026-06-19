@@ -9,10 +9,12 @@ interface GroupsViewProps {
     currentUserId: number;
     onCreateGroup: () => void;
     onAddExpense: (group: GroupDetail) => void;
-    onSelect: (groupId: number) => void;
 }
 
-export default function GroupsView({ groups, rawBalances, currentUserId, onCreateGroup, onAddExpense, onSelect }: GroupsViewProps) {
+import { useNavigate } from 'react-router-dom';
+
+export default function GroupsView({ groups, rawBalances, currentUserId, onCreateGroup, onAddExpense }: GroupsViewProps) {
+    const navigate = useNavigate();
     const calculateGroupNet = (groupId: number) => {
         let net = 0;
         rawBalances.forEach(b => {
@@ -40,7 +42,7 @@ export default function GroupsView({ groups, rawBalances, currentUserId, onCreat
              {groups.map(g => {
                 const net = calculateGroupNet(g.id);
                 return (
-                   <div key={g.id} onClick={() => onSelect(g.id)} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col hover:shadow-lg transition-shadow relative cursor-pointer">
+                   <div key={g.id} onClick={() => navigate(`/groups/${g.id}`)} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col hover:shadow-lg transition-shadow relative cursor-pointer">
                       <div className={clsx("h-1.5 w-full", net > 0 ? "bg-[#007A64]" : net < 0 ? "bg-gray-400" : "bg-gray-200")} />
                       
                       <div className="p-6 flex-1 flex flex-col">
@@ -89,7 +91,7 @@ export default function GroupsView({ groups, rawBalances, currentUserId, onCreat
                                      <p className="text-[12px] text-gray-500 mb-1 font-medium">You owe</p>
                                      <h4 className="text-[32px] font-bold text-[#D93F3C] leading-none">${Math.abs(net).toFixed(2)}</h4>
                                   </div>
-                                  <button onClick={(e) => {e.stopPropagation(); onSelect(g.id)}} className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition-colors text-sm border border-gray-200 active:scale-95">
+                                  <button onClick={(e) => {e.stopPropagation(); navigate(`/groups/${g.id}`)}} className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 transition-colors text-sm border border-gray-200 active:scale-95">
                                      View Details
                                   </button>
                                </>

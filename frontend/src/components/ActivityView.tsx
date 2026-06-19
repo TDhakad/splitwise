@@ -12,10 +12,12 @@ interface ActivityViewProps {
   groups: GroupDetail[];
   users: User[];
   currentUserId: number;
-  onSelectExpense: (expense: ExpenseWithCreator) => void;
 }
 
-export default function ActivityView({ expenses, settlements, groups, users, currentUserId, onSelectExpense }: ActivityViewProps) {
+import { useNavigate } from 'react-router-dom';
+
+export default function ActivityView({ expenses, settlements, groups, users, currentUserId }: ActivityViewProps) {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<ActivityFilter>('All');
   const [visibleCount, setVisibleCount] = useState(25);
 
@@ -111,7 +113,7 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
 
   const renderRow = (activity: ActivityItem) => {
      if (activity.type === 'expense') {
-        return <ExpenseActivityRow key={activity.id} activity={activity} currentUserId={currentUserId} onClick={() => onSelectExpense(activity.expenseObj)} />;
+        return <ExpenseActivityRow key={activity.id} activity={activity} currentUserId={currentUserId} onClick={() => navigate(`/expenses/${activity.expenseObj.id}`, { state: { from: 'activity' } })} />;
      }
      if (activity.type === 'settlement') return <SettlementActivityRow key={activity.id} activity={activity} />;
      if (activity.type === 'group_invite') return <GroupInviteActivityRow key={activity.id} activity={activity} />;

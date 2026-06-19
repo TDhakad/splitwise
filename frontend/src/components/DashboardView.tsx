@@ -2,8 +2,10 @@ import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import { initials } from '../lib/utils';
 import type { DashboardProps } from '../types/ui';
+import { useNavigate } from 'react-router-dom';
 
 export default function DashboardView({ balances, rawBalances, groups, users, currentUserId }: DashboardProps) {
+    const navigate = useNavigate();
     const netBalance = balances.net_balance || 0;
     const totalOwedToMe = balances.total_owed || 0;
     const totalIOwe = balances.total_owes || 0;
@@ -126,7 +128,7 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                 </div>
                 <div className="space-y-6 flex-1">
                    {groupBalancesList.slice(0,3).map(g => (
-                      <div key={g.id} className="flex items-center gap-4 group cursor-pointer">
+                      <div key={g.id} onClick={() => navigate(`/groups/${g.id}`)} className="flex items-center gap-4 group cursor-pointer">
                          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500 shrink-0 group-hover:bg-[#EAF5F2] group-hover:text-[#007A64] transition-colors">
                             <MSIcon name="flight" />
                          </div>
@@ -143,7 +145,7 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                    ))}
                    {groupBalancesList.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No group balances.</p>}
                 </div>
-                <button className="text-[#007A64] text-[11px] font-bold tracking-[0.1em] mt-8 hover:bg-[#EAF5F2] rounded-lg py-2 uppercase w-full text-center transition-colors">
+                <button onClick={() => navigate('/groups')} className="text-[#007A64] text-[11px] font-bold tracking-[0.1em] mt-8 hover:bg-[#EAF5F2] rounded-lg py-2 uppercase w-full text-center transition-colors">
                    View All Groups
                 </button>
              </div>
