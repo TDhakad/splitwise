@@ -42,6 +42,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))
     description = Column(String)
     total_amount = Column(Float)
@@ -54,6 +55,56 @@ class Expense(Base):
     group = relationship("Group", back_populates="expenses")
     creator = relationship("User", back_populates="expenses_created")
     participants = relationship("ExpenseParticipant", back_populates="expense", cascade="all, delete-orphan")
+    plan = relationship("Plan", back_populates="expenses")
+
+class Plan(Base):
+    __tablename__ = "plans"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    name = Column(String)
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    total_budget = Column(Integer) # In cents
+    status = Column(String, default="draft") # draft, active, completed
+    type = Column(String, default="custom") # trip, monthly_budget, custom
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User")
+    group = relationship("Group")
+    groups = relationship("PlanGroup", back_populates="plan", cascade="all, delete-orphan")
+    allocations = relationship("PlanAllocation", back_populates="plan", cascade="all, delete-orphan")
+    predecisions = relationship("PlanPredecision", back_populates="plan", cascade="all, delete-orphan")
+    expenses = relationship("Expense", back_populates="plan")
+
+class PlanAllocation(Base):
+    __tablename__ = "plan_allocations"
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("plans.id"))
+    category = Column(String)
+    allocated_amount = Column(Integer) # In cents
+
+    plan = relationship("Plan", back_populates="allocations")
+
+class PlanPredecision(Base):
+    __tablename__ = "plan_predecisions"
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("plans.id"))
+    title = Column(String)
+    category = Column(String)
+    expected_amount = Column(Integer) # In cents
+    status = Column(String, default="expected") # expected, realized
+
+    plan = relationship("Plan", back_populates="predecisions")
+
+class PlanGroup(Base):
+    __tablename__ = "plan_groups"
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("plans.id"))
+    group_id = Column(Integer, ForeignKey("groups.id"))
+
+    plan = relationship("Plan", back_populates="groups")
+    group = relationship("Group")
 
 class ExpenseParticipant(Base):
     __tablename__ = "expense_participants"

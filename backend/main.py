@@ -19,6 +19,7 @@ from .database import SessionLocal, engine
 from .auth import get_password_hash, verify_password, create_access_token, verify_google_token, get_current_user
 from .config import settings
 from .util import process_receipt_image
+from . import preplanning
 
 # Create the database tables
 models.Base.metadata.create_all(bind=engine)
@@ -490,6 +491,7 @@ def create_expense(expense: schemas.ExpenseCreate, current_user: models.User = D
     # 3. Create the Expense
     db_expense = models.Expense(
         group_id=expense.group_id,
+        plan_id=expense.plan_id,
         created_by=current_user.id,
         description=expense.description,
         total_amount=expense.total_amount,
@@ -779,6 +781,8 @@ def get_expense_audit_logs(expense_id: int, current_user: models.User = Depends(
         models.AuditLog.target_id == expense_id
     ).order_by(models.AuditLog.timestamp.asc()).all()
     return logs
+
+app.include_router(preplanning.router, prefix="/api/v1")
 
 # --- Frontend Serving (Must be at the very bottom) ---
 from fastapi.responses import FileResponse
