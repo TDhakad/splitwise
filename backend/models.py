@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, DateTime
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Float, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 import datetime
 from .database import Base
@@ -57,6 +57,10 @@ class Expense(Base):
     participants = relationship("ExpenseParticipant", back_populates="expense", cascade="all, delete-orphan")
     plan = relationship("Plan", back_populates="expenses")
 
+    __table_args__ = (
+        CheckConstraint("total_amount > 0", name="ck_expenses_total_amount_positive"),
+    )
+
 class Plan(Base):
     __tablename__ = "plans"
     id = Column(Integer, primary_key=True, index=True)
@@ -77,6 +81,12 @@ class Plan(Base):
     predecisions = relationship("PlanPredecision", back_populates="plan", cascade="all, delete-orphan")
     expenses = relationship("Expense", back_populates="plan")
 
+    __table_args__ = (
+        CheckConstraint("total_budget >= 0", name="ck_plans_total_budget_non_negative"),
+        CheckConstraint("status IN ('draft', 'active', 'completed')", name="ck_plans_status"),
+        CheckConstraint("type IN ('trip', 'monthly_budget', 'custom')", name="ck_plans_type"),
+    )
+
 class PlanAllocation(Base):
     __tablename__ = "plan_allocations"
     id = Column(Integer, primary_key=True, index=True)
@@ -85,6 +95,11 @@ class PlanAllocation(Base):
     allocated_amount = Column(Integer) # In cents
 
     plan = relationship("Plan", back_populates="allocations")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "category", name="uq_plan_allocations_plan_category"),
+        CheckConstraint("allocated_amount >= 0", name="ck_plan_allocations_amount_non_negative"),
+    )
 
 class PlanPredecision(Base):
     __tablename__ = "plan_predecisions"
@@ -97,6 +112,11 @@ class PlanPredecision(Base):
 
     plan = relationship("Plan", back_populates="predecisions")
 
+    __table_args__ = (
+        CheckConstraint("expected_amount >= 0", name="ck_plan_predecisions_amount_non_negative"),
+        CheckConstraint("status IN ('expected', 'realized')", name="ck_plan_predecisions_status"),
+    )
+
 class PlanGroup(Base):
     __tablename__ = "plan_groups"
     id = Column(Integer, primary_key=True, index=True)
@@ -105,6 +125,10 @@ class PlanGroup(Base):
 
     plan = relationship("Plan", back_populates="groups")
     group = relationship("Group")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "group_id", name="uq_plan_groups_plan_group"),
+    )
 
 class ExpenseParticipant(Base):
     __tablename__ = "expense_participants"
@@ -116,6 +140,12 @@ class ExpenseParticipant(Base):
 
     expense = relationship("Expense", back_populates="participants")
     user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("expense_id", "user_id", name="uq_expense_participants_expense_user"),
+        CheckConstraint("amount_paid >= 0", name="ck_expense_participants_amount_paid_non_negative"),
+        CheckConstraint("amount_owed >= 0", name="ck_expense_participants_amount_owed_non_negative"),
+    )
 
 class Settlement(Base):
     __tablename__ = "settlements"
@@ -133,6 +163,12 @@ class Settlement(Base):
     payer = relationship("User", foreign_keys=[payer_id])
     payee = relationship("User", foreign_keys=[payee_id])
 
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_settlements_amount_positive"),
+        CheckConstraint("payer_id != payee_id", name="ck_settlements_distinct_users"),
+        CheckConstraint("status IN ('COMPLETED')", name="ck_settlements_status"),
+    )
+
 class Balance(Base):
     """
     A materialized view or computed table of current debt edges.
@@ -148,6 +184,12 @@ class Balance(Base):
     from_user = relationship("User", foreign_keys=[from_user_id])
     to_user = relationship("User", foreign_keys=[to_user_id])
     group = relationship("Group", foreign_keys=[group_id])
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "from_user_id", "to_user_id", name="uq_balances_group_from_to"),
+        CheckConstraint("amount >= 0", name="ck_balances_amount_non_negative"),
+        CheckConstraint("from_user_id != to_user_id", name="ck_balances_distinct_users"),
+    )
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -172,3 +214,9 @@ class Friendship(Base):
 
     requester = relationship("User", foreign_keys=[requester_id])
     addressee = relationship("User", foreign_keys=[addressee_id])
+
+    __table_args__ = (
+        UniqueConstraint("requester_id", "addressee_id", name="uq_friendships_requester_addressee"),
+        CheckConstraint("requester_id != addressee_id", name="ck_friendships_distinct_users"),
+        CheckConstraint("status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'REMOVED')", name="ck_friendships_status"),
+    )
