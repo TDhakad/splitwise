@@ -1,13 +1,15 @@
 import clsx from 'clsx';
 import MSIcon from '../MSIcon';
 import { avatarColor, initials } from '../../lib/utils';
+import type { ReceiptReviewData } from '../../types/ui';
 import type { User } from '../../types/api';
-import type { MemberTotal } from './itemizedSplitUtils';
+import { toNumber, type MemberTotal } from './itemizedSplitUtils';
 
 interface SplitSummaryPanelProps {
   activeUsers: User[];
   currentUserId: number;
   receiptTotal: number;
+  receiptData: ReceiptReviewData;
   assignedSum: number;
   unassigned: number;
   memberTotals: Record<number, MemberTotal>;
@@ -19,14 +21,20 @@ export default function SplitSummaryPanel({
   activeUsers,
   currentUserId,
   receiptTotal,
+  receiptData,
   assignedSum,
   unassigned,
   memberTotals,
   isFullyAssigned,
   onFinish,
 }: SplitSummaryPanelProps) {
+  const subtotal = toNumber(receiptData.subtotal);
+  const discount = toNumber(receiptData.discount);
+  const tax = toNumber(receiptData.tax);
+  const tip = toNumber(receiptData.tip);
+
   return (
-    <div className="w-full lg:w-96 shrink-0 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sticky top-8">
+    <div className="w-full bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
       <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-4">Current Split Summary</h3>
 
       <div className="mb-6">
@@ -51,6 +59,22 @@ export default function SplitSummaryPanel({
           {unassigned > 0.01 && <span className="text-red-500">Unassigned: ${unassigned.toFixed(2)}</span>}
           {unassigned < -0.01 && <span className="text-red-500">Overassigned: ${Math.abs(unassigned).toFixed(2)}</span>}
         </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-5 mb-6">
+        <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase mb-3">Receipt Totals</h3>
+        <div className="space-y-2 text-sm">
+          <SummaryRow label="Subtotal" value={subtotal} />
+          {discount > 0 && <SummaryRow label="Discount" value={-discount} />}
+          <SummaryRow label="Tax" value={tax} />
+          <SummaryRow label="Tip" value={tip} />
+          <div className="border-t border-gray-100 pt-2 mt-2">
+            <SummaryRow label="Total" value={receiptTotal} strong />
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+          Tax, tip, and discount are split proportionally by each person&apos;s item subtotal.
+        </p>
       </div>
 
       <div className="border-t border-gray-100 pt-6 mb-8">
@@ -86,6 +110,23 @@ export default function SplitSummaryPanel({
           Assign all items to finish.
         </p>
       )}
+    </div>
+  );
+}
+
+interface SummaryRowProps {
+  label: string;
+  value: number;
+  strong?: boolean;
+}
+
+function SummaryRow({ label, value, strong = false }: SummaryRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className={strong ? 'font-bold text-gray-900' : 'text-gray-600'}>{label}</span>
+      <span className={clsx('tabular-nums', strong ? 'font-bold text-gray-900' : 'font-semibold text-gray-700')}>
+        ${value.toFixed(2)}
+      </span>
     </div>
   );
 }

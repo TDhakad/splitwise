@@ -145,6 +145,86 @@ async def test_expense_create_and_update_accept_timezone_aware_dates(client: Asy
 
 
 @pytest.mark.asyncio
+async def test_receipt_breakdown_is_returned_and_preserved_on_update(client: AsyncClient):
+    headers = await auth_headers(client)
+    receipt_breakdown = {
+        "distribution_method": "proportional_by_item_subtotal",
+        "totals": {"subtotal": 100, "discount": 0, "tax": 8, "tip": 12, "total": 120},
+        "items": [
+            {
+                "name": "Pizza",
+                "quantity": 1,
+                "price": 60,
+                "split_type": "shared",
+                "shares": [
+                    {"user_id": 1, "amount": 60},
+                ],
+            }
+        ],
+        "member_totals": [
+            {"user_id": 1, "subtotal": 100, "discount": 0, "tax": 8, "tip": 12, "total": 120},
+        ],
+    }
+
+    create_response = await client.post(
+        "/expenses/",
+        headers=headers,
+        json={
+            "description": "Dinner receipt",
+            "total_amount": 120,
+            "currency": "USD",
+            "has_receipt": True,
+            "receipt_breakdown": receipt_breakdown,
+            "participants": [
+                {"user_id": 1, "amount_paid": 120, "amount_owed": 120},
+            ],
+        },
+    )
+    assert create_response.status_code == 200, create_response.text
+    assert create_response.json()["receipt_breakdown"]["totals"]["tax"] == 8
+
+    expenses_response = await client.get("/users/1/expenses", headers=headers)
+    assert expenses_response.status_code == 200, expenses_response.text
+    assert expenses_response.json()[0]["receipt_breakdown"]["items"][0]["name"] == "Pizza"
+
+    update_response = await client.put(
+        f"/expenses/{create_response.json()['id']}",
+        headers=headers,
+        json={
+            "description": "Dinner receipt updated",
+            "total_amount": 120,
+            "currency": "USD",
+            "participants": [
+                {"user_id": 1, "amount_paid": 120, "amount_owed": 120},
+            ],
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    assert update_response.json()["receipt_breakdown"]["totals"]["total"] == 120
+
+
+@pytest.mark.asyncio
+async def test_normal_expense_without_receipt_breakdown_remains_valid(client: AsyncClient):
+    headers = await auth_headers(client)
+
+    response = await client.post(
+        "/expenses/",
+        headers=headers,
+        json={
+            "description": "Coffee",
+            "total_amount": 5,
+            "currency": "USD",
+            "participants": [
+                {"user_id": 1, "amount_paid": 5, "amount_owed": 5},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["receipt_breakdown"] is None
+
+
+@pytest.mark.asyncio
 async def test_groups_list_includes_members(client: AsyncClient):
     headers = await auth_headers(client)
     create_response = await client.post(

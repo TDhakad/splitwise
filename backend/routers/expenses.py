@@ -88,6 +88,7 @@ async def create_expense(
         date=as_naive_utc(expense.date) or datetime.datetime.utcnow(),
         category=expense_category_value(expense.category),
         has_receipt=expense.has_receipt or False,
+        receipt_breakdown=jsonable_encoder(expense.receipt_breakdown) if expense.receipt_breakdown is not None else None,
     )
     db.add(db_expense)
     await db.flush()
@@ -158,6 +159,12 @@ async def update_expense(
     db_expense.currency = expense_in.currency
     db_expense.category = expense_category_value(expense_in.category)
     db_expense.date = as_naive_utc(expense_in.date) or db_expense.date
+    if "receipt_breakdown" in expense_in.model_fields_set:
+        db_expense.receipt_breakdown = (
+            jsonable_encoder(expense_in.receipt_breakdown)
+            if expense_in.receipt_breakdown is not None
+            else None
+        )
 
     for participant in list(db_expense.participants):
         await db.delete(participant)

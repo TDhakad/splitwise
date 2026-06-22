@@ -2,10 +2,12 @@ import { Fragment, useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import ExpenseDeleteDialog from './ExpenseDeleteDialog';
+import ItemizedSplitStep from './ItemizedSplitStep';
+import ReceiptBreakdownCard from './ReceiptBreakdownCard';
 import { avatarColor, initials } from '../lib/utils';
-import { useExpenseAudit } from '../features/expenses/api';
-import type { ExpenseWithCreator, User } from '../types/api';
-import type { ExpenseSelectionContext } from '../types/ui';
+import { useExpenseAudit, useUpdateExpense } from '../features/expenses/api';
+import type { ExpenseCategory, ExpenseCreate, ExpenseParticipantBase, ExpenseWithCreator, ReceiptBreakdown, User } from '../types/api';
+import type { BooleanById, ExpenseSelectionContext, ReceiptReviewData } from '../types/ui';
 
 interface ExpenseDetailViewProps {
    expense: ExpenseWithCreator;
@@ -19,7 +21,9 @@ interface ExpenseDetailViewProps {
 
 export default function ExpenseDetailView({ expense, context, users, currentUserId, onBack, onEdit, onDeleted }: ExpenseDetailViewProps) {
    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+   const [showReceiptSplitEditor, setShowReceiptSplitEditor] = useState(false);
    const auditQuery = useExpenseAudit(expense?.id);
+   const updateExpense = useUpdateExpense();
    const auditLogs = auditQuery.data ?? [];
 
    const creator = users.find(u => u.id === expense.created_by) || { name: expense.creator_name || 'Someone' };
@@ -48,6 +52,27 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
    const payerStr = payers.length === 1 
       ? (payers[0].user_id === currentUserId ? 'You' : users.find(u => u.id === payers[0].user_id)?.name)
       : 'Multiple people';
+   const payerId = payers[0]?.user_id ?? currentUserId;
+   const receiptData = expense.receipt_breakdown ? receiptBreakdownToReviewData(expense.receipt_breakdown) : null;
+   const involvedUsers = expense.receipt_breakdown ? receiptBreakdownToInvolvedUsers(expense.receipt_breakdown) : {};
+
+   const handleSaveReceiptSplit = async (participants: ExpenseParticipantBase[], finalTotal: number, receiptBreakdown: ReceiptBreakdown) => {
+      const payload: ExpenseCreate = {
+         group_id: expense.group_id,
+         plan_id: expense.plan_id ?? null,
+         description: expense.description,
+         total_amount: finalTotal,
+         currency: 'USD',
+         date: expense.date,
+         category: toExpenseCategory(expense.category),
+         has_receipt: true,
+         receipt_breakdown: receiptBreakdown,
+         participants,
+      };
+
+      await updateExpense.mutateAsync({ expenseId: expense.id, currentUserId, payload });
+      setShowReceiptSplitEditor(false);
+   };
 
    return (
       <div className="max-w-[1200px] mx-auto p-8 h-full overflow-y-auto">
@@ -154,6 +179,15 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                      })}
                   </div>
                </div>
+
+               {expense.receipt_breakdown && (
+                  <ReceiptBreakdownCard
+                     breakdown={expense.receipt_breakdown}
+                     users={users}
+                     currentUserId={currentUserId}
+                     onEdit={() => setShowReceiptSplitEditor(true)}
+                  />
+               )}
             </div>
 
             {/* Right Column */}
@@ -235,6 +269,48 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                onDeleted={onDeleted}
             />
          )}
+         {showReceiptSplitEditor && receiptData && expense.receipt_breakdown && (
+            <ItemizedSplitStep
+               receiptData={receiptData}
+               users={users}
+               involvedUsers={involvedUsers}
+               currentUserId={currentUserId}
+               payerId={payerId}
+               initialBreakdown={expense.receipt_breakdown}
+               onSave={handleSaveReceiptSplit}
+               onClose={() => setShowReceiptSplitEditor(false)}
+               onBack={() => setShowReceiptSplitEditor(false)}
+            />
+         )}
       </div>
    );
+}
+
+function receiptBreakdownToReviewData(breakdown: ReceiptBreakdown): ReceiptReviewData {
+   return {
+      items: breakdown.items.map(item => ({
+         name: item.name,
+         quantity: item.quantity ?? undefined,
+         price: item.price,
+      })),
+      subtotal: breakdown.totals.subtotal,
+      discount: breakdown.totals.discount,
+      tax: breakdown.totals.tax,
+      tip: breakdown.totals.tip,
+      total: breakdown.totals.total,
+      is_receipt: true,
+   };
+}
+
+function receiptBreakdownToInvolvedUsers(breakdown: ReceiptBreakdown): BooleanById {
+   const involved: BooleanById = {};
+   breakdown.member_totals.forEach(member => {
+      involved[member.user_id] = true;
+   });
+   return involved;
+}
+
+function toExpenseCategory(category: string | null | undefined): ExpenseCategory {
+   const categories: ExpenseCategory[] = ['Dining', 'Accommodation', 'Transport', 'Groceries', 'Entertainment', 'General'];
+   return categories.includes(category as ExpenseCategory) ? category as ExpenseCategory : 'General';
 }

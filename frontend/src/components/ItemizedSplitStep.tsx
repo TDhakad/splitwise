@@ -3,7 +3,7 @@ import EditItemSplitModal from './ItemizedSplit/EditItemSplitModal';
 import ReceiptItemsPanel from './ItemizedSplit/ReceiptItemsPanel';
 import SplitSummaryPanel from './ItemizedSplit/SplitSummaryPanel';
 import useItemizedSplit from './ItemizedSplit/useItemizedSplit';
-import type { ExpenseParticipantBase, User } from '../types/api';
+import type { ExpenseParticipantBase, ReceiptBreakdown, User } from '../types/api';
 import type { BooleanById, ReceiptReviewData } from '../types/ui';
 
 interface ItemizedSplitStepProps {
@@ -12,16 +12,17 @@ interface ItemizedSplitStepProps {
   involvedUsers: BooleanById;
   currentUserId: number;
   payerId: number;
-  onSave: (participants: ExpenseParticipantBase[], finalTotal: number) => void;
+  initialBreakdown?: ReceiptBreakdown | null;
+  onSave: (participants: ExpenseParticipantBase[], finalTotal: number, receiptBreakdown: ReceiptBreakdown) => void;
   onClose: () => void;
   onBack: () => void;
 }
 
-export default function ItemizedSplitStep({ receiptData, users, involvedUsers, currentUserId, payerId, onSave, onClose, onBack }: ItemizedSplitStepProps) {
-  const split = useItemizedSplit(receiptData, users, involvedUsers, currentUserId, payerId);
+export default function ItemizedSplitStep({ receiptData, users, involvedUsers, currentUserId, payerId, initialBreakdown, onSave, onClose, onBack }: ItemizedSplitStepProps) {
+  const split = useItemizedSplit(receiptData, users, involvedUsers, currentUserId, payerId, initialBreakdown);
 
   const handleFinish = () => {
-    onSave(split.buildParticipants(), split.receiptTotal);
+    onSave(split.buildParticipants(), split.receiptTotal, split.buildBreakdown());
   };
 
   return (
@@ -41,28 +42,33 @@ export default function ItemizedSplitStep({ receiptData, users, involvedUsers, c
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-8 items-start">
-            <ReceiptItemsPanel
-              items={receiptData.items}
-              activeUsers={split.activeUsers}
-              currentUserId={currentUserId}
-              itemAssignments={split.itemAssignments}
-              customSplits={split.customSplits}
-              onSetAllForMe={split.setAllForMe}
-              onToggleUser={split.toggleUserForItem}
-              onEditItem={split.setEditingItemIdx}
-            />
-            <SplitSummaryPanel
-              activeUsers={split.activeUsers}
-              currentUserId={currentUserId}
-              receiptTotal={split.receiptTotal}
-              assignedSum={split.assignedSum}
-              unassigned={split.unassigned}
-              memberTotals={split.memberTotals}
-              isFullyAssigned={split.isFullyAssigned}
-              onFinish={handleFinish}
-            />
+        <div className="flex-1 min-h-0 p-8">
+          <div className="max-w-6xl mx-auto h-full flex flex-col lg:flex-row gap-8 items-stretch">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <ReceiptItemsPanel
+                items={receiptData.items}
+                activeUsers={split.activeUsers}
+                currentUserId={currentUserId}
+                itemAssignments={split.itemAssignments}
+                customSplits={split.customSplits}
+                onSetAllForMe={split.setAllForMe}
+                onToggleUser={split.toggleUserForItem}
+                onEditItem={split.setEditingItemIdx}
+              />
+            </div>
+            <div className="w-full lg:w-96 shrink-0 min-h-0 overflow-y-auto">
+              <SplitSummaryPanel
+                activeUsers={split.activeUsers}
+                currentUserId={currentUserId}
+                receiptTotal={split.receiptTotal}
+                receiptData={receiptData}
+                assignedSum={split.assignedSum}
+                unassigned={split.unassigned}
+                memberTotals={split.memberTotals}
+                isFullyAssigned={split.isFullyAssigned}
+                onFinish={handleFinish}
+              />
+            </div>
           </div>
         </div>
       </div>

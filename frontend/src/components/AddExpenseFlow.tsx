@@ -11,7 +11,7 @@ import { apiFetch, getErrorMessage } from '../lib/constants';
 import { useCreateExpense } from '../features/expenses/api';
 import { buildExpenseParticipants, calculateSplitPreview, getSplitValidation, parseAmount } from '../features/expenses/splitUtils';
 import type { ChangeEvent } from 'react';
-import type { ExpenseCreate, ExpenseParticipantBase, GroupDetail, Plan, User } from '../types/api';
+import type { ExpenseCreate, ExpenseParticipantBase, GroupDetail, Plan, ReceiptBreakdown, User } from '../types/api';
 import type { BooleanById, ExpenseEntryMode, ExpenseStep, ReceiptReviewData, ReceiptScanResponse, SplitMethod, StringById } from '../types/ui';
 
 interface AddExpenseFlowProps {
@@ -29,6 +29,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   const [entryMode, setEntryMode] = useState<ExpenseEntryMode>('manual');
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptReviewData | null>(null);
+  const [receiptBreakdown, setReceiptBreakdown] = useState<ReceiptBreakdown | null>(null);
   const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
 
   const [description, setDescription] = useState('');
@@ -71,6 +72,8 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
       description: finalDesc,
       total_amount: finalTotal,
       currency: 'USD',
+      has_receipt: Boolean(receiptData),
+      receipt_breakdown: receiptBreakdown,
       participants,
     };
 
@@ -113,9 +116,10 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
     }
   };
 
-  const handleFinishItemizedSplit = (participants: ExpenseParticipantBase[], finalTotal: number) => {
+  const handleFinishItemizedSplit = (participants: ExpenseParticipantBase[], finalTotal: number, nextReceiptBreakdown: ReceiptBreakdown) => {
     setAmount(finalTotal.toFixed(2));
     setSplitMethod('unequal');
+    setReceiptBreakdown(nextReceiptBreakdown);
 
     const newInvolved: BooleanById = {};
     const newCustomValues: StringById = {};

@@ -39,6 +39,7 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
   const plansQuery = usePlans();
   const plans = plansQuery.data ?? [];
   const updateExpense = useUpdateExpense();
+  const isItemizedReceipt = Boolean(expense.receipt_breakdown);
 
   const payerPart = expense.participants?.find(p => p.amount_paid > 0) || expense.participants?.[0];
   const [payerId, setPayerId] = useState(payerPart ? payerPart.user_id : currentUserId);
@@ -105,6 +106,7 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
       date: date ? new Date(date).toISOString() : new Date().toISOString(),
       category,
       has_receipt: hasReceipt,
+      receipt_breakdown: hasReceipt ? expense.receipt_breakdown ?? null : null,
       participants
     };
 
@@ -158,8 +160,11 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
                     <label className="block text-[11px] font-bold tracking-widest uppercase text-gray-500 mb-2">Amount</label>
                     <div className="flex items-center border-b border-gray-300 pb-2 focus-within:border-[#007A64] transition-colors">
                       <span className="text-2xl text-gray-400 mr-2">$</span>
-                      <input type="number" value={amount} onChange={e => handleAmountChange(e.target.value)} className="w-full text-4xl font-bold text-gray-900 bg-transparent outline-none" />
+                      <input type="number" value={amount} onChange={e => handleAmountChange(e.target.value)} disabled={isItemizedReceipt} className="w-full text-4xl font-bold text-gray-900 bg-transparent outline-none disabled:text-gray-500" />
                     </div>
+                    {isItemizedReceipt && (
+                      <p className="text-xs font-medium text-gray-500 mt-2">Edit the receipt split from the expense detail screen.</p>
+                    )}
                   </div>
                   <div className="flex-1">
                     <label className="block text-[11px] font-bold tracking-widest uppercase text-gray-500 mb-2">Description</label>
@@ -250,17 +255,31 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
                 </div>
               </div>
 
-              <SplitEditor
-                expense={expense}
-                users={users}
-                splitMethod={splitMethod}
-                splits={splits}
-                totalAccounted={totalAccounted}
-                parsedAmount={parsedAmount}
-                isPerfectSplit={isPerfectSplit}
-                onSplitMethodChange={handleSplitMethodChange}
-                onSplitChange={(userId, value) => setSplits(prev => ({ ...prev, [userId]: value }))}
-              />
+              {isItemizedReceipt ? (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#EAF5F2] text-[#007A64] flex items-center justify-center shrink-0">
+                      <MSIcon name="receipt_long" className="text-xl" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Receipt itemization controls this split</h3>
+                      <p className="text-sm text-gray-500 mt-1">Use Edit Split in the receipt breakdown to change item assignments, tax, tip, and participant totals together.</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <SplitEditor
+                  expense={expense}
+                  users={users}
+                  splitMethod={splitMethod}
+                  splits={splits}
+                  totalAccounted={totalAccounted}
+                  parsedAmount={parsedAmount}
+                  isPerfectSplit={isPerfectSplit}
+                  onSplitMethodChange={handleSplitMethodChange}
+                  onSplitChange={(userId, value) => setSplits(prev => ({ ...prev, [userId]: value }))}
+                />
+              )}
             </div>
 
             <ReceiptPanel hasReceipt={hasReceipt} onHasReceiptChange={setHasReceipt} />

@@ -86,6 +86,40 @@ export interface ExpenseParticipant extends ExpenseParticipantBase {
   id: number;
 }
 
+export interface ReceiptBreakdownTotals {
+  subtotal: number;
+  discount: number;
+  tax: number;
+  tip: number;
+  total: number;
+}
+
+export interface ReceiptBreakdownShare {
+  user_id: number;
+  amount: number;
+}
+
+export type ReceiptBreakdownSplitType = 'individual' | 'shared' | 'custom';
+
+export interface ReceiptBreakdownItem {
+  name: string;
+  quantity?: number | string | null;
+  price: number;
+  split_type: ReceiptBreakdownSplitType;
+  shares: ReceiptBreakdownShare[];
+}
+
+export interface ReceiptBreakdownMemberTotal extends ReceiptBreakdownTotals {
+  user_id: number;
+}
+
+export interface ReceiptBreakdown {
+  distribution_method: 'proportional_by_item_subtotal';
+  totals: ReceiptBreakdownTotals;
+  items: ReceiptBreakdownItem[];
+  member_totals: ReceiptBreakdownMemberTotal[];
+}
+
 export interface ExpenseCreate {
   group_id?: number | null;
   plan_id?: number | null;
@@ -95,6 +129,7 @@ export interface ExpenseCreate {
   date?: string | null;
   category?: ExpenseCategory | null;
   has_receipt?: boolean;
+  receipt_breakdown?: ReceiptBreakdown | null;
   participants: ExpenseParticipantBase[];
 }
 
@@ -107,6 +142,7 @@ export interface Expense extends Omit<ExpenseCreate, 'currency' | 'date' | 'cate
   date: string;
   category?: string | null;
   has_receipt?: boolean;
+  receipt_breakdown?: ReceiptBreakdown | null;
   participants: ExpenseParticipant[];
 }
 
