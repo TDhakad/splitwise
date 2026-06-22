@@ -31,6 +31,7 @@ const buildExpenseCategoryPayload = (expense: ExpenseWithCreator, category: Expe
   date: expense.date,
   category,
   has_receipt: expense.has_receipt ?? false,
+  receipt_breakdown: expense.receipt_breakdown ?? null,
   participants: expense.participants.map(participant => ({
     user_id: participant.user_id,
     amount_paid: participant.amount_paid,

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Float, DateTime, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Float, DateTime, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
 import datetime
 from .database import Base
@@ -50,6 +50,7 @@ class Expense(Base):
     date = Column(DateTime, default=datetime.datetime.utcnow)
     category = Column(String, nullable=True, default="Entertainment / Drinks")
     has_receipt = Column(Boolean, default=False)
+    receipt_breakdown = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     group = relationship("Group", back_populates="expenses")

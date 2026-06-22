@@ -75,6 +75,38 @@ class ExpenseParticipantBase(BaseModel):
     amount_paid: float = Field(default=0.0, ge=0)
     amount_owed: float = Field(default=0.0, ge=0)
 
+class ReceiptBreakdownTotals(BaseModel):
+    subtotal: float = 0
+    discount: float = 0
+    tax: float = 0
+    tip: float = 0
+    total: float
+
+class ReceiptBreakdownShare(BaseModel):
+    user_id: int
+    amount: float = Field(ge=0)
+
+class ReceiptBreakdownItem(BaseModel):
+    name: str
+    quantity: float | int | str | None = None
+    price: float = Field(ge=0)
+    split_type: Literal["individual", "shared", "custom"]
+    shares: List[ReceiptBreakdownShare] = Field(min_length=1)
+
+class ReceiptBreakdownMemberTotal(BaseModel):
+    user_id: int
+    subtotal: float = 0
+    discount: float = 0
+    tax: float = 0
+    tip: float = 0
+    total: float
+
+class ReceiptBreakdown(BaseModel):
+    distribution_method: Literal["proportional_by_item_subtotal"] = "proportional_by_item_subtotal"
+    totals: ReceiptBreakdownTotals
+    items: List[ReceiptBreakdownItem]
+    member_totals: List[ReceiptBreakdownMemberTotal]
+
 class ExpenseCreate(BaseModel):
     group_id: Optional[int] = None
     plan_id: Optional[int] = None
@@ -84,6 +116,7 @@ class ExpenseCreate(BaseModel):
     date: Optional[datetime] = None
     category: Optional[ExpenseCategory] = ExpenseCategory.GENERAL
     has_receipt: Optional[bool] = False
+    receipt_breakdown: Optional[ReceiptBreakdown] = None
     participants: List[ExpenseParticipantBase] = Field(min_length=1)
 
 class ExpenseParticipant(ExpenseParticipantBase):
@@ -102,6 +135,7 @@ class Expense(BaseModel):
     date: datetime
     category: Optional[str] = None
     has_receipt: Optional[bool] = False
+    receipt_breakdown: Optional[ReceiptBreakdown] = None
     participants: List[ExpenseParticipant]
     
     class Config:

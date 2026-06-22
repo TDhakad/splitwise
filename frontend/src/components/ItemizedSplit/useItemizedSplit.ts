@@ -1,13 +1,32 @@
 import { useMemo, useState } from 'react';
-import { buildReceiptParticipants, calculateMemberTotals, toNumber } from './itemizedSplitUtils';
-import type { User } from '../../types/api';
+import { buildReceiptBreakdown, buildReceiptParticipants, calculateMemberTotals, toNumber } from './itemizedSplitUtils';
+import type { ReceiptBreakdown, User } from '../../types/api';
 import type { BooleanById, NumberById, ReceiptReviewData } from '../../types/ui';
 
-export default function useItemizedSplit(receiptData: ReceiptReviewData, users: User[], involvedUsers: BooleanById, currentUserId: number, payerId: number) {
+export default function useItemizedSplit(
+  receiptData: ReceiptReviewData,
+  users: User[],
+  involvedUsers: BooleanById,
+  currentUserId: number,
+  payerId: number,
+  initialBreakdown?: ReceiptBreakdown | null,
+) {
   const activeUsers = useMemo(() => users.filter(u => involvedUsers[u.id]), [users, involvedUsers]);
   const receiptTotal = toNumber(receiptData.total);
-  const [itemAssignments, setItemAssignments] = useState<number[][]>(() => receiptData.items.map(() => activeUsers.map(u => u.id)));
-  const [customSplits, setCustomSplits] = useState<Array<NumberById | null>>(() => receiptData.items.map(() => null));
+  const [itemAssignments, setItemAssignments] = useState<number[][]>(() => (
+    initialBreakdown
+      ? initialBreakdown.items.map(item => item.shares.map(share => share.user_id))
+      : receiptData.items.map(() => activeUsers.map(u => u.id))
+  ));
+  const [customSplits, setCustomSplits] = useState<Array<NumberById | null>>(() => (
+    initialBreakdown
+      ? initialBreakdown.items.map(item => (
+        item.split_type === 'custom'
+          ? Object.fromEntries(item.shares.map(share => [share.user_id, share.amount])) as NumberById
+          : null
+      ))
+      : receiptData.items.map(() => null)
+  ));
   const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   const memberTotals = useMemo(
@@ -55,10 +74,12 @@ export default function useItemizedSplit(receiptData: ReceiptReviewData, users: 
   };
 
   const buildParticipants = () => buildReceiptParticipants(activeUsers, payerId, receiptTotal, memberTotals);
+  const buildBreakdown = () => buildReceiptBreakdown(receiptData, activeUsers, itemAssignments, customSplits, memberTotals);
 
   return {
     activeUsers,
     assignedSum,
+    buildBreakdown,
     buildParticipants,
     customSplits,
     editingItemIdx,

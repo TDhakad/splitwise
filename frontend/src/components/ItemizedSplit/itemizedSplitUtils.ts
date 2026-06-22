@@ -1,4 +1,4 @@
-import type { ExpenseParticipantBase, User } from '../../types/api';
+import type { ExpenseParticipantBase, ReceiptBreakdown, User } from '../../types/api';
 import type { NumberById, ReceiptLineItem, ReceiptReviewData } from '../../types/ui';
 
 export interface MemberTotal {
@@ -100,4 +100,50 @@ export function buildReceiptParticipants(
     amount_paid: u.id === payerId ? receiptTotal : 0,
     amount_owed: memberTotals[u.id].total,
   }));
+}
+
+export function buildReceiptBreakdown(
+  receiptData: ReceiptReviewData,
+  activeUsers: User[],
+  itemAssignments: number[][],
+  customSplits: Array<NumberById | null>,
+  memberTotals: Record<number, MemberTotal>,
+): ReceiptBreakdown {
+  return {
+    distribution_method: 'proportional_by_item_subtotal',
+    totals: {
+      subtotal: toNumber(receiptData.subtotal),
+      discount: toNumber(receiptData.discount),
+      tax: toNumber(receiptData.tax),
+      tip: toNumber(receiptData.tip),
+      total: toNumber(receiptData.total),
+    },
+    items: receiptData.items.map((item, idx) => {
+      const custom = customSplits[idx];
+      const shares = custom
+        ? Object.entries(custom)
+          .filter(([, amount]) => amount > 0)
+          .map(([userId, amount]) => ({ user_id: Number(userId), amount }))
+        : itemAssignments[idx].map(userId => ({
+          user_id: userId,
+          amount: toNumber(item.price) / itemAssignments[idx].length,
+        }));
+
+      return {
+        name: item.name,
+        quantity: item.quantity ?? null,
+        price: toNumber(item.price),
+        split_type: custom ? 'custom' : shares.length === 1 ? 'individual' : 'shared',
+        shares,
+      };
+    }),
+    member_totals: activeUsers.map(user => ({
+      user_id: user.id,
+      subtotal: memberTotals[user.id].subtotal,
+      discount: memberTotals[user.id].discount,
+      tax: memberTotals[user.id].tax,
+      tip: memberTotals[user.id].tip,
+      total: memberTotals[user.id].total,
+    })),
+  };
 }
