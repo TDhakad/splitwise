@@ -175,10 +175,10 @@ export default function App() {
                   <MSIcon name="account_balance_wallet" fill={1} className="text-xl" />
                </div>
                <div>
-                  <h1 className="font-bold text-lg leading-tight tracking-tight text-[#007A64]">Equitable<br />Finance</h1>
+                  <h1 className="font-bold text-lg leading-tight tracking-tight text-[#007A64]">HisabKitab</h1>
                </div>
             </div>
-            <p className="mt-3 text-[10px] font-bold text-gray-500 tracking-[0.15em] uppercase">Manage shared expenses</p>
+            <p className="mt-3 text-[10px] font-bold text-gray-500 tracking-[0.15em] uppercase">Plan. Split. Settle.</p>
          </div>
 
          <div className="px-4 py-2">

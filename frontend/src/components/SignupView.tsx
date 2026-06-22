@@ -51,8 +51,8 @@ export default function SignupView({ onSignupSuccess, onSwitchToLogin }: SignupV
       <div className="w-full max-w-[1000px] mx-auto flex flex-col md:flex-row items-center justify-center gap-12 py-12">
         <div className="hidden md:flex flex-col flex-1 max-w-[450px] relative h-full justify-center">
           <div className="mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">Equitable Finance</h1>
-            <p className="text-lg text-gray-500 max-w-sm">Precision in every split. Vitality in your growth. Security for your future.</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">HisabKitab</h1>
+            <p className="text-lg text-gray-500 max-w-sm">Plan spending, split expenses, and settle clearly.</p>
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 relative overflow-hidden group">
@@ -72,12 +72,12 @@ export default function SignupView({ onSignupSuccess, onSwitchToLogin }: SignupV
         <div className="w-full max-w-[420px] flex-none">
           <div className="bg-white rounded-2xl p-8 md:p-10 shadow-xl shadow-black/5 border border-gray-100">
             <div className="md:hidden text-center mb-8">
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">Equitable Finance</h1>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">HisabKitab</h1>
               <p className="text-base text-gray-500">Create your account</p>
             </div>
             <div className="hidden md:block mb-8">
               <h2 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Get Started</h2>
-              <p className="text-base text-gray-500">Join the future of expense management.</p>
+              <p className="text-base text-gray-500">Start managing shared money clearly.</p>
             </div>
 
             {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}

@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Splitwise Clone API", lifespan=lifespan)
+app = FastAPI(title="HisabKitab API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

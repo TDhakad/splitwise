@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_db_url():
-    url = os.getenv("DATABASE_URL", "sqlite:///./splitwise.db")
+    url = os.getenv("DATABASE_URL", "sqlite:///./hisabkitab.db")
     if not url.startswith("postgres"):
         if url.startswith("sqlite+aiosqlite"):
             return url

@@ -50,17 +50,17 @@ export default function LoginView({ onLoginSuccess, onSwitchToSignup }: LoginVie
         <div className="relative z-20 max-w-lg">
           <div className="flex items-center gap-3 mb-6">
             <span className="material-symbols-outlined text-white text-[32px]">account_balance_wallet</span>
-            <h1 className="text-3xl font-bold tracking-tight text-white">Equitable Finance</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white">HisabKitab</h1>
           </div>
-          <p className="text-xl font-semibold text-white/90 mb-3">Precision in every split.</p>
-          <p className="text-lg text-white/80">Manage your collective expenses with unparalleled clarity and institutional-grade security.</p>
+          <p className="text-xl font-semibold text-white/90 mb-3">Plan it. Split it. Settle it.</p>
+          <p className="text-lg text-white/80">Manage shared spending with clear splits, planning, and settlement tracking.</p>
         </div>
       </div>
 
       <div className="w-full lg:w-[55%] flex flex-col justify-center px-6 sm:px-10 md:px-20 py-12 relative">
         <div className="lg:hidden flex items-center gap-3 mb-10">
           <span className="material-symbols-outlined text-[#007A64]">account_balance_wallet</span>
-          <span className="text-xl font-bold text-gray-900">Equitable Finance</span>
+          <span className="text-xl font-bold text-gray-900">HisabKitab</span>
         </div>
 
         <div className="w-full max-w-[420px] mx-auto">

@@ -1,7 +1,7 @@
 [project]
-name = "splitwise"
+name = "hisabkitab"
 version = "0.1.0"
-description = "Add your description here"
+description = "Shared expense splitting and planning app"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
