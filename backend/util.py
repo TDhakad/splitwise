@@ -23,7 +23,7 @@ class Receipt(BaseModel):
     is_receipt: bool
 
 def process_receipt_image(base64_image: str):
-    model = ChatOllama(model=os.getenv("OLLAMA_MODEL", "gpt-4o"), num_predict=2000)
+    model = ChatOllama(model=os.getenv("OLLAMA_MODEL", "gpt-4o"), num_predict=2000, base_url="https://ollama.com/")
 
     structured_model = model.with_structured_output(Receipt)
 
