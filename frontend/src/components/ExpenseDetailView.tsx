@@ -75,9 +75,24 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
    };
 
    return (
-      <div className="max-w-[1200px] mx-auto p-8 h-full overflow-y-auto">
+      <div className="max-w-[1200px] mx-auto p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
+         <div className="sm:hidden sticky top-0 -mx-4 -mt-4 mb-6 px-4 py-4 bg-white/95 backdrop-blur-md border-b border-gray-200 z-20 flex items-center justify-between">
+            <button onClick={onBack} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label={backText}>
+               <MSIcon name="arrow_back" className="text-2xl" />
+            </button>
+            <h1 className="font-bold text-xl text-gray-900 truncate px-3">{expense.description}</h1>
+            <div className="flex items-center gap-1">
+               <button onClick={() => onEdit(expense)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Edit expense">
+                  <MSIcon name="edit" />
+               </button>
+               <button onClick={() => setShowDeleteConfirm(true)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Delete expense">
+                  <MSIcon name="delete" />
+               </button>
+            </div>
+         </div>
+
          {/* Breadcrumb & Back */}
-         <div className="flex items-center justify-between mb-8">
+         <div className="hidden sm:flex items-center justify-between mb-8">
             <div className="flex flex-col gap-3">
                <div className="flex items-center gap-2 text-[13px] text-gray-500 font-medium">
                   {breadcrumbs.map((bc, i) => (
@@ -94,7 +109,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
          </div>
 
          {/* Header */}
-         <div className="flex items-end justify-between mb-8">
+         <div className="hidden sm:flex items-end justify-between mb-8">
             <h1 className="text-[40px] font-bold text-gray-900 leading-none tracking-tight">{expense.description}</h1>
             <div className="flex gap-3">
                <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm">
@@ -106,22 +121,25 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
             </div>
          </div>
 
-         <div className="flex flex-col lg:flex-row gap-8">
+         <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
             {/* Left Column */}
             <div className="flex-1 space-y-6">
                {/* High-level details box */}
-               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex overflow-hidden">
-                  <div className="flex-1 p-8 border-r border-gray-100 flex flex-col justify-between space-y-8">
-                     <div className="flex items-end gap-1">
+               <div className="bg-white rounded-3xl sm:rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row overflow-hidden">
+                  <div className="flex-1 p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-gray-100 flex flex-col justify-between space-y-8">
+                     <div className="flex items-end justify-center sm:justify-start gap-1 text-center sm:text-left">
                         <div>
-                           <p className="text-[11px] font-bold tracking-widest uppercase text-gray-500 mb-2">Amount</p>
-                           <h2 className="text-5xl font-bold text-[#007A64] flex items-baseline tracking-tight">
+                           <p className="text-[11px] font-bold tracking-widest uppercase text-gray-500 mb-2 sm:block hidden">Amount</p>
+                           <h2 className="text-6xl sm:text-5xl font-bold text-[#007A64] flex items-baseline justify-center sm:justify-start tracking-tight">
                               <span className="text-[28px] mr-1">$</span>
                               {expense.total_amount.toFixed(2)}
                            </h2>
+                           <p className="sm:hidden mt-4 text-sm font-bold text-gray-600">Paid by {payerStr}</p>
+                           {myNet > 0.005 && <p className="sm:hidden text-sm font-bold text-[#007A64] mt-1">You lent ${(myNet).toFixed(2)}</p>}
+                           {myNet < -0.005 && <p className="sm:hidden text-sm font-bold text-[#D93F3C] mt-1">You owe ${Math.abs(myNet).toFixed(2)}</p>}
                         </div>
                      </div>
-                     <div className="flex gap-12">
+                     <div className="grid grid-cols-2 sm:flex gap-4 sm:gap-12">
                         <div>
                            <p className="text-[11px] font-bold tracking-widest uppercase text-gray-500 mb-2">Date</p>
                            <div className="flex items-center gap-2 text-gray-900 font-medium">
@@ -138,7 +156,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                         </div>
                      </div>
                   </div>
-                  <div className="w-[280px] bg-gray-50 p-8 flex flex-col items-center justify-center text-center">
+                  <div className="hidden sm:flex w-[280px] bg-gray-50 p-8 flex-col items-center justify-center text-center">
                      <div className="w-16 h-16 rounded-full bg-[#EAF5F2] text-[#007A64] flex items-center justify-center shadow-sm mb-4">
                         <MSIcon name="person" className="text-3xl" />
                      </div>
@@ -151,9 +169,9 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                </div>
 
                {/* Splits & Shares */}
-               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+               <div className="bg-white rounded-3xl sm:rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                     <h3 className="text-xs font-bold tracking-widest uppercase text-gray-500">Splits & Shares</h3>
+                     <h3 className="text-xs font-bold tracking-widest uppercase text-gray-500">Split Among {expense.participants.length} People</h3>
                   </div>
                   <div className="divide-y divide-gray-100">
                      {expense.participants.map(p => {
@@ -191,7 +209,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
             </div>
 
             {/* Right Column */}
-            <div className="w-[380px] shrink-0 flex flex-col gap-6">
+            <div className="w-full lg:w-[380px] shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-6">
                {/* Receipt Block */}
                {expense.has_receipt ? (
                   <div className="bg-gray-900 rounded-2xl overflow-hidden relative shadow-md h-48 group">
@@ -247,7 +265,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                </div>
 
                {/* Settlement Status */}
-               <div className="bg-[#EAF5F2] border border-[#c1e0d7] rounded-2xl p-6 shadow-sm">
+               <div className="bg-[#EAF5F2] border border-[#c1e0d7] rounded-2xl p-6 shadow-sm sm:col-span-2 lg:col-span-1">
                   <div className="flex items-center gap-2 mb-3">
                      <MSIcon name="info" className="text-[#007A64]" />
                      <h3 className="text-xs font-bold tracking-widest uppercase text-[#007A64]">Settlement Status</h3>

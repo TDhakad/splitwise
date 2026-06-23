@@ -166,9 +166,9 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#F8F9FA] font-sans text-gray-900 selection:bg-[#007A64] selection:text-white">
+    <div className="flex h-dvh bg-[#F8F9FA] font-sans text-gray-900 selection:bg-[#007A64] selection:text-white">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 relative z-20">
+      <aside className="hidden md:flex w-64 bg-white border-r border-gray-200 flex-col shrink-0 relative z-20">
          <div className="p-6">
             <div className="flex items-center gap-3">
                <div className="w-10 h-10 bg-[#007A64] rounded-xl flex items-center justify-center text-white shrink-0 shadow-md">
@@ -210,7 +210,25 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#F8F9FA] relative">
-         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-8 shrink-0 z-10 sticky top-0">
+         {!selectedExpenseCtx && (
+            <header className="md:hidden h-[98px] bg-white/95 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-30 shadow-sm">
+               <div className="flex items-center gap-3 min-w-0">
+                  <button className="w-12 h-12 rounded-full bg-[#007A64] flex items-center justify-center text-white font-bold text-base shadow-sm ring-2 ring-white shrink-0">
+                     {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                  </button>
+                  <div className="min-w-0">
+                     <p className="text-[11px] font-bold text-gray-500 tracking-[0.12em] uppercase">HisabKitab</p>
+                     <h1 className="text-2xl font-bold leading-tight text-gray-900 truncate">Plan. Split. Settle.</h1>
+                  </div>
+               </div>
+               <button onClick={() => openExpenseModal()} className="bg-[#007A64] hover:bg-[#00604f] text-white rounded-2xl px-4 py-3 font-bold flex items-center gap-2 transition-all shadow-md active:scale-95">
+                  <MSIcon name="add" className="text-xl" />
+                  <span className="leading-tight">Add<br />Expense</span>
+               </button>
+            </header>
+         )}
+
+         <header className="hidden md:flex h-20 bg-white/80 backdrop-blur-md border-b border-gray-200 items-center justify-between px-8 shrink-0 z-10 sticky top-0">
             <div className="relative w-96">
                <MSIcon name="search" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                <input type="text" placeholder="Search expenses, friends..." className="w-full bg-gray-100/80 border-transparent rounded-full py-2.5 pl-11 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#007A64]/20 focus:bg-white transition-all" />
@@ -231,7 +249,7 @@ export default function App() {
             </div>
          </header>
 
-         <main className="flex-1 overflow-hidden relative">
+         <main className="flex-1 overflow-hidden relative pb-20 md:pb-0">
             {coreError ? (
                <ErrorState title="Unable to load app data" message={coreError.error.message} />
             ) : (
@@ -257,6 +275,26 @@ export default function App() {
             )}
          </main>
       </div>
+
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+         <div className="grid grid-cols-5 gap-1">
+            {tabs.map(t => (
+               <button
+                  key={t.id}
+                  onClick={() => handleTabChange(t.id)}
+                  className={clsx(
+                     'min-h-14 rounded-2xl flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-all',
+                     activeTab === t.id
+                        ? 'bg-[#007A64] text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                  )}
+               >
+                  <MSIcon name={t.icon} fill={activeTab === t.id ? 1 : 0} className="text-[22px]" />
+                  <span className="leading-none">{t.id === 'preplanning' ? 'Plans' : t.label}</span>
+               </button>
+            ))}
+         </div>
+      </nav>
 
       {/* Modals */}
       {showAddExpense && <AddExpenseFlow users={users} groups={groups} currentUserId={currentUser.id} groupCtx={expenseGroupCtx} planCtx={expensePlanCtx} onClose={() => setShowAddExpense(false)} onSave={handleAddExpenseSaved} />}

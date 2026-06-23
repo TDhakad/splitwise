@@ -111,26 +111,39 @@ export default function FriendDetailView({ friendId, users, rawBalances, groups,
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-500 tracking-wider uppercase">
-                    <th className="px-6 py-4 font-bold">Group / Context</th>
-                    <th className="px-6 py-4 font-bold text-right">Balance</th>
-                    <th className="px-6 py-4 font-bold text-right w-[160px]">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+              <div className="w-full text-left">
+                <div className="hidden md:flex bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-500 tracking-wider uppercase">
+                  <div className="px-6 py-4 flex-1">Group / Context</div>
+                  <div className="px-6 py-4 text-right w-[140px]">Balance</div>
+                  <div className="px-6 py-4 text-right w-[160px]">Action</div>
+                </div>
+                <div className="divide-y divide-gray-100">
                   {simplifiedDebts.map(debt => (
-                    <tr key={debt.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
-                            <MSIcon name={debt.groupId ? "group" : "person"} className="text-gray-500" />
-                          </div>
-                          <p className="font-bold text-sm text-gray-900">{debt.groupName}</p>
+                    <div key={debt.id} className="p-4 md:px-6 md:py-4 hover:bg-gray-50 transition-colors flex flex-col md:flex-row md:items-center gap-4 md:gap-0">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
+                          <MSIcon name={debt.groupId ? "group" : "person"} className="text-gray-500" />
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-right align-middle">
+                        <p className="font-bold text-sm text-gray-900 truncate">{debt.groupName}</p>
+                        
+                        {/* Mobile Balance */}
+                        <div className="md:hidden ml-auto text-right shrink-0 pl-2">
+                          {debt.net > 0 ? (
+                            <>
+                               <p className="text-lg font-bold text-[#007A64] leading-none">${debt.net.toFixed(2)}</p>
+                               <p className="text-[10px] font-bold text-[#007A64] mt-1">owes you</p>
+                            </>
+                          ) : (
+                            <>
+                               <p className="text-lg font-bold text-[#D93F3C] leading-none">${Math.abs(debt.net).toFixed(2)}</p>
+                               <p className="text-[10px] font-bold text-[#D93F3C] mt-1">you owe</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Desktop Balance */}
+                      <div className="hidden md:block w-[140px] text-right shrink-0 px-6">
                         {debt.net > 0 ? (
                           <>
                              <p className="text-lg font-bold text-[#007A64] leading-none">${debt.net.toFixed(2)}</p>
@@ -142,8 +155,8 @@ export default function FriendDetailView({ friendId, users, rawBalances, groups,
                              <p className="text-[11px] font-bold text-[#D93F3C] mt-1.5">you owe</p>
                           </>
                         )}
-                      </td>
-                      <td className="px-6 py-4 text-right align-middle">
+                      </div>
+                      <div className="w-full md:w-[160px] md:text-right shrink-0 md:px-6">
                         {debt.net > 0 ? (
                           <button onClick={() => onSettleUp({ payerId: friendId, payeeId: currentUserId, amount: debt.net, maxAmount: debt.net, groupId: debt.groupId })} className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-sm w-full">
                             Record Payment
@@ -153,18 +166,16 @@ export default function FriendDetailView({ friendId, users, rawBalances, groups,
                             Settle Up
                           </button>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))}
                   {simplifiedDebts.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-gray-500 text-sm">
-                        You and {friend.name.split(' ')[0]} are completely settled up.
-                      </td>
-                    </tr>
+                    <div className="px-6 py-12 text-center text-gray-500 text-sm">
+                      You and {friend.name.split(' ')[0]} are completely settled up.
+                    </div>
                   )}
-                </tbody>
-              </table>
+                </div>
+              </div>
             </div>
           </div>
           

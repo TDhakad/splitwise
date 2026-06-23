@@ -119,12 +119,15 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-8 h-full overflow-y-auto">
-      <div className="mb-10">
-        <h2 className="text-[28px] font-bold text-gray-900 mb-2">Recent Activity</h2>
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
+      <div className="mb-8 sm:mb-10">
+        <h2 className="text-[40px] sm:text-[28px] font-bold text-gray-900 mb-2">
+          <span className="sm:hidden">Activity</span>
+          <span className="hidden sm:inline">Recent Activity</span>
+        </h2>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
            <p className="text-gray-600 font-medium">Track your shared expenses and group interactions.</p>
-           <div className="flex items-center gap-2">
+           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
               {(['All', 'Expenses', 'Settlements', 'Groups'] as ActivityFilter[]).map(f => (
                  <button key={f} onClick={() => handleFilterChange(f)} className={clsx("px-4 py-1.5 rounded-full text-sm font-bold transition-colors border", filter === f ? "bg-gray-200 border-gray-200 text-gray-900" : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50")}>
                     {f}
@@ -138,8 +141,11 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
         {groupOrder.length === 0 && <p className="text-gray-500 text-center py-10">No activity found.</p>}
         {groupOrder.map(label => (
           <section key={label}>
-             <h3 className="text-xs font-bold tracking-widest uppercase text-gray-900 mb-4 ml-1">{label}</h3>
-             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-100">
+             <h3 className="flex items-center gap-4 text-xs font-bold tracking-widest uppercase text-gray-900 mb-4 ml-1">
+                <span>{label}</span>
+                <span className="sm:hidden h-px bg-gray-200 flex-1" />
+             </h3>
+             <div className="sm:bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm sm:overflow-hidden sm:divide-y sm:divide-gray-100">
                 {grouped[label].map(renderRow)}
              </div>
           </section>

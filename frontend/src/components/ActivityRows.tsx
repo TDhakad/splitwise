@@ -15,7 +15,7 @@ interface ActivityRowProps<TActivity extends ActivityItem> {
 
 export function ExpenseActivityRow({ activity, currentUserId, onClick }: ExpenseActivityRowProps) {
    return (
-      <div onClick={onClick} className="p-5 flex items-start gap-4 hover:bg-gray-50 transition-colors cursor-pointer group">
+      <div onClick={onClick} className="p-4 sm:p-5 mb-3 sm:mb-0 bg-white sm:bg-transparent border border-gray-200 sm:border-0 rounded-2xl sm:rounded-none shadow-sm sm:shadow-none flex items-start gap-4 hover:bg-gray-50 transition-colors cursor-pointer group">
          <div className="relative pt-1 shrink-0">
             <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white transition-transform group-hover:scale-105", avatarColor(activity.user_id))}>
                {initials(activity.userName)}
@@ -26,7 +26,7 @@ export function ExpenseActivityRow({ activity, currentUserId, onClick }: Expense
          </div>
          
          <div className="flex-1 min-w-0 pt-1">
-            <p className="text-[15px] text-gray-900 leading-snug">
+            <p className="text-base sm:text-[15px] text-gray-900 leading-snug">
                <span className="font-bold">{activity.userName}</span> {activity.action} {activity.item && <span className="font-semibold italic">"{activity.item}"</span>}
             </p>
             <p className="text-sm text-gray-500 mt-1">
@@ -34,7 +34,7 @@ export function ExpenseActivityRow({ activity, currentUserId, onClick }: Expense
             </p>
          </div>
 
-         <div className="text-right shrink-0 pt-1 ml-4">
+         <div className="text-right shrink-0 pt-1 ml-2 sm:ml-4">
             {activity.net > 0.005 && (
                <>
                   <p className="text-[11px] font-bold tracking-widest uppercase text-[#007A64] mb-1">You are owed</p>
@@ -66,7 +66,7 @@ export function ExpenseActivityRow({ activity, currentUserId, onClick }: Expense
 
 export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementActivity>) {
    return (
-      <div className="p-5 flex items-start gap-4 hover:bg-gray-50 transition-colors">
+      <div className="p-4 sm:p-5 mb-3 sm:mb-0 bg-white sm:bg-transparent border border-gray-200 sm:border-0 rounded-2xl sm:rounded-none shadow-sm sm:shadow-none flex items-start gap-4 hover:bg-gray-50 transition-colors">
          <div className="relative pt-1 shrink-0">
             <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white", avatarColor(activity.user_id))}>
                {initials(activity.userName)}
@@ -77,7 +77,7 @@ export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementA
          </div>
          
          <div className="flex-1 min-w-0 pt-1">
-            <p className="text-[15px] text-gray-900 leading-snug">
+            <p className="text-base sm:text-[15px] text-gray-900 leading-snug">
                <span className="font-bold">{activity.userName}</span> {activity.action} {activity.item && <span className="font-semibold italic">"{activity.item}"</span>}
             </p>
             <p className="text-sm text-gray-500 mt-1">
@@ -85,7 +85,7 @@ export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementA
             </p>
          </div>
 
-         <div className="text-right shrink-0 pt-1 ml-4 flex flex-col items-end">
+         <div className="text-right shrink-0 pt-1 ml-2 sm:ml-4 flex flex-col items-end">
             <p className="text-xl font-bold text-[#007A64]">${activity.amount.toFixed(2)}</p>
             <div className="flex items-center gap-1.5 text-gray-700 justify-end mt-1">
                <MSIcon name="check_circle" className="text-sm text-[#007A64]" />
@@ -98,7 +98,7 @@ export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementA
 
 export function GroupInviteActivityRow({ activity }: ActivityRowProps<GroupInviteActivity>) {
    return (
-      <div className="p-5 flex items-start gap-4 hover:bg-gray-50 transition-colors">
+      <div className="p-4 sm:p-5 mb-3 sm:mb-0 bg-white sm:bg-transparent border border-gray-200 sm:border-0 rounded-2xl sm:rounded-none shadow-sm sm:shadow-none flex items-start gap-4 hover:bg-gray-50 transition-colors">
          <div className="relative pt-1 shrink-0">
             <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white", avatarColor(activity.user_id))}>
                {initials(activity.userName)}
@@ -109,7 +109,7 @@ export function GroupInviteActivityRow({ activity }: ActivityRowProps<GroupInvit
          </div>
          
          <div className="flex-1 min-w-0 pt-1">
-            <p className="text-[15px] text-gray-900 leading-snug">
+            <p className="text-base sm:text-[15px] text-gray-900 leading-snug">
                <span className="font-bold">{activity.userName}</span> {activity.action} {activity.item && <span className="font-semibold italic">"{activity.item}"</span>}
             </p>
             <p className="text-sm text-gray-500 mt-1">

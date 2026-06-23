@@ -192,33 +192,46 @@ export default function FriendsView({ users, rawBalances, balances, currentUserI
            </button>
         </div>
 
-        <table className="w-full text-left border-collapse">
-           <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-200">
-                 <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest w-1/2">Friend</th>
-                 <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right">Balance</th>
-                 <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right w-[180px]">Action</th>
-              </tr>
-           </thead>
-           <tbody className="divide-y divide-gray-100">
+        <div className="w-full text-left">
+           <div className="hidden md:flex bg-gray-50/50 border-b border-gray-200">
+              <div className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest flex-1">Friend</div>
+              <div className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right w-[140px]">Balance</div>
+              <div className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right w-[180px]">Action</div>
+           </div>
+           <div className="divide-y divide-gray-100">
               {filteredFriends.map(f => (
-                 <tr 
+                 <div 
                     key={f.id} 
                     onClick={() => onSelectFriend && onSelectFriend(f.id)}
-                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="p-4 md:px-6 md:py-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center gap-4 md:gap-0"
                  >
-                    <td className="px-6 py-4">
-                       <div className="flex items-center gap-4">
-                          <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm", avatarColor(f.id))}>
-                             {initials(f.name)}
-                          </div>
-                          <div>
-                             <p className="font-bold text-sm text-gray-900">{f.name}</p>
-                             <p className="text-[13px] text-gray-500">{f.email}</p>
-                          </div>
+                    <div className="flex items-center gap-4 flex-1">
+                       <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm shrink-0", avatarColor(f.id))}>
+                          {initials(f.name)}
                        </div>
-                    </td>
-                    <td className="px-6 py-4 text-right align-middle">
+                       <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-gray-900 truncate">{f.name}</p>
+                          <p className="text-[13px] text-gray-500 truncate">{f.email}</p>
+                       </div>
+                       <div className="md:hidden text-right shrink-0 pl-2">
+                          {f.net > 0 && (
+                             <>
+                                <p className="text-lg font-bold text-[#007A64] leading-none">${f.net.toFixed(2)}</p>
+                                <p className="text-[10px] font-bold text-[#007A64] mt-1">owes you</p>
+                             </>
+                          )}
+                          {f.net < 0 && (
+                             <>
+                                <p className="text-lg font-bold text-[#D93F3C] leading-none">${Math.abs(f.net).toFixed(2)}</p>
+                                <p className="text-[10px] font-bold text-[#D93F3C] mt-1">you owe</p>
+                             </>
+                          )}
+                          {f.net === 0 && (
+                             <p className="text-[13px] font-medium text-gray-400">Settled up</p>
+                          )}
+                       </div>
+                    </div>
+                    <div className="hidden md:block w-[140px] text-right shrink-0 px-6">
                        {f.net > 0 && (
                           <>
                              <p className="text-[22px] font-bold text-[#007A64] leading-none">${f.net.toFixed(2)}</p>
@@ -234,38 +247,36 @@ export default function FriendsView({ users, rawBalances, balances, currentUserI
                        {f.net === 0 && (
                           <p className="text-[15px] font-medium text-gray-400">Settled up</p>
                        )}
-                    </td>
-                    <td className="px-6 py-4 text-right align-middle">
+                    </div>
+                    <div className="w-full md:w-[180px] md:text-right shrink-0 md:px-6">
                        {f.net > 0 && (
-                          <button onClick={(e) => { e.stopPropagation(); onSettleUp({ payerId: f.id, payeeId: currentUserId, amount: f.net, maxAmount: f.net }); }} className="bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
+                          <button onClick={(e) => { e.stopPropagation(); onSettleUp({ payerId: f.id, payeeId: currentUserId, amount: f.net, maxAmount: f.net }); }} className="w-full md:w-auto bg-[#EAF5F2] text-[#007A64] hover:bg-[#007A64] hover:text-white px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
                              Record Payment
                           </button>
                        )}
                        {f.net < 0 && (
                           <button 
                              onClick={(e) => { e.stopPropagation(); onSettleUp({ payerId: currentUserId, payeeId: f.id, amount: Math.abs(f.net), maxAmount: Math.abs(f.net) }); }}
-                             className="bg-[#007A64] text-white hover:bg-[#00604f] px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]"
+                             className="w-full md:w-auto bg-[#007A64] text-white hover:bg-[#00604f] px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]"
                           >
                              Settle Up
                           </button>
                        )}
                        {f.net === 0 && (
-                          <button onClick={(e) => e.stopPropagation()} className="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
+                          <button onClick={(e) => e.stopPropagation()} className="w-full md:w-auto bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-5 py-2.5 rounded-lg font-bold text-xs transition-colors shadow-sm min-w-[120px]">
                              View Details
                           </button>
                        )}
-                    </td>
-                 </tr>
+                    </div>
+                 </div>
               ))}
               {filteredFriends.length === 0 && (
-                 <tr>
-                    <td colSpan={3} className="px-6 py-12 text-center text-gray-500 text-sm">
-                       No friends found.
-                    </td>
-                 </tr>
+                 <div className="px-6 py-12 text-center text-gray-500 text-sm">
+                    No friends found.
+                 </div>
               )}
-           </tbody>
-        </table>
+           </div>
+        </div>
       </div>
 
       {showAddModal && (

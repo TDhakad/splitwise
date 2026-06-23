@@ -56,6 +56,17 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   const canSave = Boolean(description.trim() && total > 0 && activeIds.length > 0 && !validationMsg);
   const splitLabel = splitMethod === 'equal' ? 'Equally' : splitMethod === 'unequal' ? 'Unequally' : 'By %';
 
+  const handleReset = () => {
+    setEntryMode('manual');
+    setDescription('');
+    setAmount('');
+    setPayerId(currentUserId);
+    setSplitMethod('equal');
+    setInvolvedUsers({ [currentUserId]: true });
+    setCustomValues({});
+    setError('');
+  };
+
   const handleSave = async (participantsOverride: ExpenseParticipantBase[] | null = null, totalOverride: number | null = null) => {
     if (!participantsOverride && !canSave) {
       setError(validationMsg || 'Please fill all fields.');
@@ -149,22 +160,25 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   return (
     <>
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
-        <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden relative"
-          style={{ maxHeight: '95dvh', animation: 'slideUp 0.3s cubic-bezier(0,0,0.2,1)' }}>
+      <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+        <div className="bg-white sm:rounded-3xl w-full sm:max-w-md h-full sm:h-auto shadow-2xl flex flex-col overflow-hidden relative"
+          style={{ maxHeight: '100dvh', animation: 'slideUp 0.3s cubic-bezier(0,0,0.2,1)' }}>
           {step === 'add' && (
             <>
-              <header className="sticky top-0 w-full z-10 bg-white border-b border-gray-200 flex flex-col px-5 pt-4">
+              <header className="sticky top-0 w-full z-10 bg-white border-b border-gray-200 flex flex-col px-5 pt-5 sm:pt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95 transition-all"><MSIcon name="close" className="text-gray-900 text-xl" /></button>
-                  <h1 className="font-bold text-lg text-gray-900">New Expense</h1>
-                  <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("font-bold text-sm px-4 py-2 rounded-lg transition-all active:scale-95", canSave ? "text-[#007A64] hover:bg-[#EAF5F2]" : "text-gray-400 cursor-not-allowed")}>Save</button>
+                  <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95 transition-all" aria-label="Close add expense"><MSIcon name="close" className="text-gray-900 text-2xl" /></button>
+                  <h1 className="font-bold text-3xl sm:text-lg text-gray-900">Add Expense</h1>
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleReset} className="font-bold text-sm px-3 py-2 rounded-lg text-[#007A64] hover:bg-[#EAF5F2] transition-all active:scale-95">Reset</button>
+                    <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("hidden sm:block font-bold text-sm px-4 py-2 rounded-lg transition-all active:scale-95", canSave ? "text-[#007A64] hover:bg-[#EAF5F2]" : "text-gray-400 cursor-not-allowed")}>Save</button>
+                  </div>
                 </div>
-                <div className="flex gap-6">
-                  <button onClick={() => setEntryMode('manual')} className={clsx("pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2", entryMode === 'manual' ? "border-[#007A64] text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
+                <div className="flex gap-1 bg-gray-100 rounded-2xl p-1 mb-4 sm:bg-transparent sm:rounded-none sm:p-0 sm:mb-0 sm:gap-6">
+                  <button onClick={() => setEntryMode('manual')} className={clsx("flex-1 sm:flex-none py-3 sm:pb-3 sm:py-0 px-3 sm:px-2 text-sm font-bold rounded-xl sm:rounded-none sm:border-b-2 transition-colors flex items-center justify-center gap-2", entryMode === 'manual' ? "bg-[#007A64] text-white sm:bg-transparent sm:border-[#007A64] sm:text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
                     <MSIcon name="edit" style={{ fontSize: 18 }} /> Manual Entry
                   </button>
-                  <button onClick={() => setEntryMode('scan')} className={clsx("pb-3 px-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2", entryMode === 'scan' ? "border-[#007A64] text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
+                  <button onClick={() => setEntryMode('scan')} className={clsx("flex-1 sm:flex-none py-3 sm:pb-3 sm:py-0 px-3 sm:px-2 text-sm font-bold rounded-xl sm:rounded-none sm:border-b-2 transition-colors flex items-center justify-center gap-2", entryMode === 'scan' ? "bg-[#007A64] text-white sm:bg-transparent sm:border-[#007A64] sm:text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
                     <MSIcon name="receipt_long" style={{ fontSize: 18 }} /> Scan Receipt
                   </button>
                 </div>
@@ -197,6 +211,13 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                   onFileUpload={handleFileUpload}
                   onSelectFriends={() => setStep('friends')}
                 />
+              )}
+              {entryMode === 'manual' && (
+                <div className="sm:hidden sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+                  <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("w-full min-h-16 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]", canSave ? "bg-[#007A64] text-white shadow-lg" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
+                    Add Expense <MSIcon name="arrow_forward" />
+                  </button>
+                </div>
               )}
             </>
           )}

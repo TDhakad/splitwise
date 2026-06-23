@@ -10,6 +10,7 @@ export default function CreatePlanFlow({ onNavigate }: PlanNavigationProps) {
   const [endDate, setEndDate] = useState('');
   const [totalBudget, setTotalBudget] = useState('');
   const [groupId, setGroupId] = useState('');
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
   const groupsQuery = useGroups();
   const createPlan = useCreatePlan();
   const groups = groupsQuery.data ?? [];
@@ -104,25 +105,56 @@ export default function CreatePlanFlow({ onNavigate }: PlanNavigationProps) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Total Budget Allocation (USD)</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">$</span>
-                  <input type="text" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} placeholder="100,000" className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3.5 pl-8 pr-4 text-gray-900 font-bold text-lg focus:outline-none focus:ring-2 focus:ring-[#007A64]/20 focus:border-[#007A64] transition-all" />
+              <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#007A64]" />
+                <label className="block text-[11px] font-bold text-gray-500 tracking-widest uppercase mb-3 ml-2">Total Budget Target</label>
+                <div className="flex items-center text-4xl font-black text-gray-900 ml-2">
+                  <span className="text-gray-400 mr-3">$</span>
+                  <input type="text" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} placeholder="0.00" className="w-full bg-transparent focus:outline-none placeholder:text-gray-300" />
                 </div>
-                <p className="text-xs font-medium text-gray-500 mt-2">Enter the total capital available.</p>
               </div>
 
-              <div>
+              <div className="flex flex-col justify-center">
                 <label className="block text-sm font-bold text-gray-700 mb-2">Track expenses from Group (Optional)</label>
                 <div className="relative">
-                  <MSIcon name="group" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <select value={groupId} onChange={e => setGroupId(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3.5 pl-12 pr-4 text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#007A64]/20 focus:border-[#007A64] transition-all appearance-none">
-                    <option value="">None (Explicit expenses only)</option>
-                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsGroupDropdownOpen(!isGroupDropdownOpen)}
+                    className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-12 pr-10 text-left text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-[#007A64]/20 focus:border-[#007A64] transition-all hover:bg-gray-50"
+                  >
+                    <MSIcon name="group" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <span className="block truncate">{groupId ? groups.find(g => g.id.toString() === groupId)?.name : 'None (Explicit expenses only)'}</span>
+                    <MSIcon name="expand_more" className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </button>
+                  
+                  {isGroupDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setIsGroupDropdownOpen(false)} />
+                      <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden py-2 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                        <button 
+                          type="button"
+                          onClick={() => { setGroupId(''); setIsGroupDropdownOpen(false); }}
+                          className="w-full text-left px-5 py-3 hover:bg-[#EAF5F2] transition-colors flex items-center justify-between group"
+                        >
+                          <span className={!groupId ? 'text-[#007A64] font-bold' : 'text-gray-700 font-medium group-hover:text-[#007A64] truncate'}>None (Explicit expenses only)</span>
+                          {!groupId && <MSIcon name="check" className="text-[#007A64] text-[18px] shrink-0 ml-2" />}
+                        </button>
+                        {groups.map(g => (
+                          <button 
+                            key={g.id}
+                            type="button"
+                            onClick={() => { setGroupId(g.id.toString()); setIsGroupDropdownOpen(false); }}
+                            className="w-full text-left px-5 py-3 hover:bg-[#EAF5F2] transition-colors flex items-center justify-between group"
+                          >
+                            <span className={groupId === g.id.toString() ? 'text-[#007A64] font-bold truncate' : 'text-gray-700 font-medium group-hover:text-[#007A64] truncate'}>{g.name}</span>
+                            {groupId === g.id.toString() && <MSIcon name="check" className="text-[#007A64] text-[18px] shrink-0 ml-2" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-                <p className="text-xs font-medium text-gray-500 mt-2">Auto-track your share of expenses in this group.</p>
+                <p className="text-xs font-medium text-gray-500 mt-3">Auto-track your share of expenses in this group.</p>
               </div>
             </div>
           </div>

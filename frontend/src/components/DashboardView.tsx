@@ -31,20 +31,30 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
     }));
 
     return (
-       <div className="flex flex-col lg:flex-row gap-8 max-w-[1400px] mx-auto p-8 h-full overflow-y-auto">
+       <div className="flex flex-col lg:flex-row gap-8 max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
           <div className="flex-1 space-y-6">
-             <div className="bg-[#EAF5F2] rounded-2xl p-8 border border-[#c1e0d7] shadow-sm relative overflow-hidden">
+             <div className="bg-[#EAF5F2] rounded-[1.75rem] sm:rounded-2xl p-6 sm:p-8 border border-[#c1e0d7] shadow-sm relative overflow-hidden">
                 <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
                     <MSIcon name="account_balance" style={{ fontSize: 200 }} className="translate-x-12 translate-y-12" />
                 </div>
                 <p className="text-[11px] font-bold text-gray-700 tracking-[0.1em] mb-3 uppercase">Total Net Balance</p>
-                <h2 className={clsx("text-5xl font-bold mb-3 tracking-tight", netBalance >= 0 ? "text-[#007A64]" : "text-red-600")}>
+                <h2 className={clsx("text-5xl sm:text-5xl font-bold mb-3 tracking-tight", netBalance >= 0 ? "text-[#007A64]" : "text-red-600")}>
                    {netBalance >= 0 ? '+ ' : '- '}${Math.abs(netBalance).toFixed(2)}
                 </h2>
                 <p className="text-sm text-gray-600 font-medium">Across {groups.length} groups and {friendsSet.size} friends</p>
+                <div className="grid grid-cols-2 gap-4 mt-7 sm:hidden">
+                   <div className="bg-white/75 border border-white rounded-2xl p-4 shadow-sm">
+                      <p className="text-xs font-bold text-gray-600 mb-2">Receivables</p>
+                      <p className="text-2xl font-bold text-[#007A64]">${totalOwedToMe.toFixed(2)}</p>
+                   </div>
+                   <div className="bg-white/75 border border-white rounded-2xl p-4 shadow-sm">
+                      <p className="text-xs font-bold text-gray-600 mb-2">Payables</p>
+                      <p className="text-2xl font-bold text-[#D93F3C]">${totalIOwe.toFixed(2)}</p>
+                   </div>
+                </div>
              </div>
 
-             <div className="flex flex-col sm:flex-row gap-6">
+             <div className="hidden sm:flex flex-col sm:flex-row gap-6">
                 <div className="flex-1 bg-white rounded-2xl p-6 border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer">
                    <div className="absolute top-0 bottom-0 right-0 w-1.5 bg-[#007A64]" />
                    <div className="flex justify-between items-start mb-8">
@@ -85,6 +95,37 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                 </div>
              </div>
 
+             <section className="lg:hidden">
+                <div className="flex items-center justify-between mb-4">
+                   <h3 className="text-2xl font-bold text-gray-900">Active Groups</h3>
+                   <button className="text-[#007A64] text-sm font-bold">See All</button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   {groupBalancesList.slice(0, 2).map(g => (
+                      <div key={g.id} className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm min-h-40 flex flex-col justify-between">
+                         <div className="flex items-start justify-between">
+                            <div className="w-11 h-11 bg-[#EAF5F2] rounded-xl flex items-center justify-center text-[#007A64]">
+                               <MSIcon name="groups" />
+                            </div>
+                            <MSIcon name="more_horiz" className="text-gray-400" />
+                         </div>
+                         <div>
+                            <h4 className="font-bold text-gray-900 leading-tight">{g.name}</h4>
+                            <p className="text-xs text-gray-500 font-medium mt-1">{g.memberCount} people</p>
+                            <p className={clsx("mt-4 text-lg font-bold", g.net >= 0 ? "text-[#007A64]" : "text-[#D93F3C]")}>
+                               {g.net >= 0 ? '+' : '-'}${Math.abs(g.net).toFixed(2)}
+                            </p>
+                         </div>
+                      </div>
+                   ))}
+                   {groupBalancesList.length === 0 && (
+                      <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-200 text-sm text-gray-500 text-center">
+                         No group balances.
+                      </div>
+                   )}
+                </div>
+             </section>
+
              <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
                 <div className="flex justify-between items-start mb-8">
                    <div>
@@ -118,7 +159,7 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
              </div>
           </div>
 
-          <div className="w-full lg:w-[340px] shrink-0 flex flex-col gap-6">
+          <div className="hidden lg:flex w-full lg:w-[340px] shrink-0 flex-col gap-6">
              <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                    <h3 className="text-lg font-bold text-gray-900">Balances by Group</h3>

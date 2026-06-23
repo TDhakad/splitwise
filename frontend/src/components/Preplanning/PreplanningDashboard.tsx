@@ -92,7 +92,7 @@ export default function PreplanningDashboard({ onNavigate }: PlanNavigationProps
       <div className="flex items-end justify-between pt-4">
         <h2 className="text-2xl font-bold text-gray-900">Active Plans</h2>
         <button onClick={() => onNavigate('create')} className="text-sm font-bold text-[#007A64] hover:text-[#00604f] flex items-center gap-1">
-          VIEW ALL <MSIcon name="arrow_forward" className="text-[16px]" />
+          CREATE PLAN <MSIcon name="add" className="text-[18px]" />
         </button>
       </div>
 
