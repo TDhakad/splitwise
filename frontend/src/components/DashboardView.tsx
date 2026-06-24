@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import { initials } from '../lib/utils';
@@ -8,27 +9,32 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
     const totalOwedToMe = balances.total_owed || 0;
     const totalIOwe = balances.total_owes || 0;
 
-    const friendsSet = new Set<number>();
-    rawBalances.forEach(b => {
-       if (b.from_user_id === currentUserId) friendsSet.add(b.to_user_id);
-       if (b.to_user_id === currentUserId) friendsSet.add(b.from_user_id);
-    });
+    const friendsSet = useMemo(() => {
+        const set = new Set<number>();
+        rawBalances.forEach(b => {
+           if (b.from_user_id === currentUserId) set.add(b.to_user_id);
+           if (b.to_user_id === currentUserId) set.add(b.from_user_id);
+        });
+        return set;
+    }, [rawBalances, currentUserId]);
 
-    const groupBalancesMap: Record<number, number> = {};
-    rawBalances.forEach(b => {
-       if (b.group_id) {
-          if (!groupBalancesMap[b.group_id]) groupBalancesMap[b.group_id] = 0;
-          if (b.from_user_id === currentUserId) groupBalancesMap[b.group_id] -= b.amount;
-          if (b.to_user_id === currentUserId) groupBalancesMap[b.group_id] += b.amount;
-       }
-    });
+    const groupBalancesList = useMemo(() => {
+        const groupBalancesMap: Record<number, number> = {};
+        rawBalances.forEach(b => {
+           if (b.group_id) {
+              if (!groupBalancesMap[b.group_id]) groupBalancesMap[b.group_id] = 0;
+              if (b.from_user_id === currentUserId) groupBalancesMap[b.group_id] -= b.amount;
+              if (b.to_user_id === currentUserId) groupBalancesMap[b.group_id] += b.amount;
+           }
+        });
 
-    const groupBalancesList = groups.map(g => ({
-       id: g.id,
-       name: g.name,
-       memberCount: g.members?.length || 0,
-       net: groupBalancesMap[g.id] || 0
-    }));
+        return groups.map(g => ({
+           id: g.id,
+           name: g.name,
+           memberCount: g.members?.length || 0,
+           net: groupBalancesMap[g.id] || 0
+        }));
+    }, [rawBalances, groups, currentUserId]);
 
     return (
        <div className="flex flex-col lg:flex-row gap-8 max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">

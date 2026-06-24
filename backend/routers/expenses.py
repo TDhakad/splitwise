@@ -1,9 +1,9 @@
 import datetime
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import event, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -12,7 +12,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..datetime_utils import as_naive_utc
 from ..dependencies import bounded_limit, require_group_member
-from ..services import rebuild_balances, to_cents
+from ..services import compute_balances_for_group, compute_balances_for_user, create_audit_log_background, to_cents
 
 router = APIRouter(tags=["expenses", "balances", "settlements"])
 
@@ -67,6 +67,7 @@ async def require_expense_access(db: AsyncSession, expense: models.Expense, curr
 @router.post("/expenses/", response_model=schemas.Expense)
 async def create_expense(
     expense: schemas.ExpenseCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -85,7 +86,7 @@ async def create_expense(
         description=expense.description,
         total_amount=expense.total_amount,
         currency=expense.currency,
-        date=as_naive_utc(expense.date) or datetime.datetime.utcnow(),
+        date=as_naive_utc(expense.date) or datetime.datetime.now(datetime.timezone.utc),
         category=expense_category_value(expense.category),
         has_receipt=expense.has_receipt or False,
         receipt_breakdown=jsonable_encoder(expense.receipt_breakdown) if expense.receipt_breakdown is not None else None,
@@ -104,8 +105,8 @@ async def create_expense(
             for participant in expense.participants
         ]
     )
-    await rebuild_balances(db, expense.group_id)
     await db.commit()
+    background_tasks.add_task(create_audit_log_background, "Expense", db_expense.id, current_user.id, "CREATE")
 
     reloaded = await get_expense_with_details(db, db_expense.id)
     return schemas.Expense.model_validate(reloaded)
@@ -114,6 +115,7 @@ async def create_expense(
 @router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_expense(
     expense_id: int,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -124,15 +126,15 @@ async def delete_expense(
     await require_expense_access(db, db_expense, current_user.id)
     group_id = db_expense.group_id
     await db.delete(db_expense)
-    await db.flush()
-    await rebuild_balances(db, group_id)
     await db.commit()
+    background_tasks.add_task(create_audit_log_background, "Expense", expense_id, current_user.id, "DELETE")
 
 
 @router.put("/expenses/{expense_id}", response_model=schemas.Expense)
 async def update_expense(
     expense_id: int,
     expense_in: schemas.ExpenseCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -154,11 +156,51 @@ async def update_expense(
 
     validate_participant_totals(expense_in)
 
+    changes = []
+    
+    if db_expense.description != expense_in.description:
+        changes.append({"type": "field", "field": "description", "old": db_expense.description, "new": expense_in.description})
+        
+    if abs(db_expense.total_amount - expense_in.total_amount) > 0.005:
+        changes.append({"type": "field", "field": "total_amount", "old": db_expense.total_amount, "new": expense_in.total_amount})
+
+    if db_expense.currency != expense_in.currency:
+        changes.append({"type": "field", "field": "currency", "old": db_expense.currency, "new": expense_in.currency})
+
+    new_category = expense_category_value(expense_in.category)
+    if db_expense.category != new_category:
+        changes.append({"type": "field", "field": "category", "old": db_expense.category, "new": new_category})
+
+    new_date = as_naive_utc(expense_in.date) or db_expense.date
+    if db_expense.date != new_date:
+        changes.append({"type": "field", "field": "date", "old": db_expense.date.isoformat() if db_expense.date else None, "new": new_date.isoformat() if new_date else None})
+
+    old_participants = {p.user_id: p for p in db_expense.participants}
+    new_participants = {p.user_id: p for p in expense_in.participants}
+    
+    for p_in in expense_in.participants:
+        p_old = old_participants.get(p_in.user_id)
+        if p_old:
+            if abs(p_old.amount_paid - p_in.amount_paid) > 0.005:
+                changes.append({"type": "split", "user_id": p_in.user_id, "field": "amount_paid", "old": p_old.amount_paid, "new": p_in.amount_paid})
+            if abs(p_old.amount_owed - p_in.amount_owed) > 0.005:
+                changes.append({"type": "split", "user_id": p_in.user_id, "field": "amount_owed", "old": p_old.amount_owed, "new": p_in.amount_owed})
+        else:
+            changes.append({"type": "split", "user_id": p_in.user_id, "field": "amount_owed", "old": 0, "new": p_in.amount_owed})
+            if p_in.amount_paid > 0:
+                changes.append({"type": "split", "user_id": p_in.user_id, "field": "amount_paid", "old": 0, "new": p_in.amount_paid})
+            
+    for u_id, p_old in old_participants.items():
+        if u_id not in new_participants:
+            changes.append({"type": "split", "user_id": u_id, "field": "amount_owed", "old": p_old.amount_owed, "new": 0})
+            if p_old.amount_paid > 0:
+                changes.append({"type": "split", "user_id": u_id, "field": "amount_paid", "old": p_old.amount_paid, "new": 0})
+
     db_expense.description = expense_in.description
     db_expense.total_amount = expense_in.total_amount
     db_expense.currency = expense_in.currency
-    db_expense.category = expense_category_value(expense_in.category)
-    db_expense.date = as_naive_utc(expense_in.date) or db_expense.date
+    db_expense.category = new_category
+    db_expense.date = new_date
     if "receipt_breakdown" in expense_in.model_fields_set:
         db_expense.receipt_breakdown = (
             jsonable_encoder(expense_in.receipt_breakdown)
@@ -166,22 +208,31 @@ async def update_expense(
             else None
         )
 
-    for participant in list(db_expense.participants):
-        await db.delete(participant)
-    await db.flush()
-
-    db.add_all(
-        [
+    incoming_participants_map = {p.user_id: p for p in expense_in.participants}
+    
+    # Update existing and remove deleted
+    for p_old in list(db_expense.participants):
+        if p_old.user_id in incoming_participants_map:
+            p_in = incoming_participants_map[p_old.user_id]
+            p_old.amount_paid = p_in.amount_paid
+            p_old.amount_owed = p_in.amount_owed
+            del incoming_participants_map[p_old.user_id]
+        else:
+            db_expense.participants.remove(p_old)
+            
+    # Add new participants
+    for p_in in incoming_participants_map.values():
+        db_expense.participants.append(
             models.ExpenseParticipant(
-                expense_id=db_expense.id,
-                user_id=participant.user_id,
-                amount_paid=participant.amount_paid,
-                amount_owed=participant.amount_owed,
+                user_id=p_in.user_id,
+                amount_paid=p_in.amount_paid,
+                amount_owed=p_in.amount_owed,
             )
-            for participant in expense_in.participants
-        ]
-    )
-    await rebuild_balances(db, db_expense.group_id)
+        )
+    
+    if changes:
+        background_tasks.add_task(create_audit_log_background, "Expense", db_expense.id, current_user.id, "UPDATE", json.dumps(changes))
+
     await db.commit()
 
     reloaded = await get_expense_with_details(db, db_expense.id)
@@ -198,14 +249,12 @@ async def get_user_balances(
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' balances")
 
-    statement = select(models.Balance).where(
-        or_(models.Balance.from_user_id == user_id, models.Balance.to_user_id == user_id)
-    )
     if group_id:
-        statement = statement.where(models.Balance.group_id == group_id)
-
-    balances_result = await db.execute(statement)
-    return balances_result.scalars().all()
+        balances = await compute_balances_for_group(db, group_id)
+        return [b for b in balances if b["from_user_id"] == user_id or b["to_user_id"] == user_id]
+    
+    balances = await compute_balances_for_user(db, user_id)
+    return balances
 
 
 @router.get("/balances/summary/{user_id}")
@@ -217,20 +266,16 @@ async def get_global_balance_summary(
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' balances")
 
-    owes_result = await db.execute(
-        select(func.coalesce(func.sum(models.Balance.amount), 0)).where(models.Balance.from_user_id == user_id)
-    )
-    owed_result = await db.execute(
-        select(func.coalesce(func.sum(models.Balance.amount), 0)).where(models.Balance.to_user_id == user_id)
-    )
-    owes = owes_result.scalar_one()
-    owed = owed_result.scalar_one()
+    balances = await compute_balances_for_user(db, user_id)
+    owes = sum(b["amount"] for b in balances if b["from_user_id"] == user_id)
+    owed = sum(b["amount"] for b in balances if b["to_user_id"] == user_id)
     return {"total_owes": owes, "total_owed": owed, "net_balance": owed - owes}
 
 
 @router.post("/settlements/", response_model=schemas.Settlement)
 async def create_settlement(
     settlement: schemas.SettlementCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -248,15 +293,9 @@ async def create_settlement(
         if settlement.payer_id not in member_ids or settlement.payee_id not in member_ids:
             raise HTTPException(status_code=403, detail="Payer and payee must both be group members.")
 
-        balance_result = await db.execute(
-            select(models.Balance).where(
-                models.Balance.group_id == settlement.group_id,
-                models.Balance.from_user_id == settlement.payer_id,
-                models.Balance.to_user_id == settlement.payee_id,
-            )
-        )
-        balance = balance_result.scalar_one_or_none()
-        outstanding_amount = balance.amount if balance else 0
+        balances = await compute_balances_for_group(db, settlement.group_id)
+        balance = next((b for b in balances if b["from_user_id"] == settlement.payer_id and b["to_user_id"] == settlement.payee_id), None)
+        outstanding_amount = balance["amount"] if balance else 0
         outstanding_cents = to_cents(outstanding_amount)
         if outstanding_cents <= 0:
             raise HTTPException(status_code=400, detail="No outstanding balance exists in this payer/payee direction.")
@@ -272,27 +311,23 @@ async def create_settlement(
             payee_id=settlement.payee_id,
             amount=settlement.amount,
             currency=settlement.currency,
-            date=datetime.datetime.utcnow(),
+            date=datetime.datetime.now(datetime.timezone.utc),
             status="COMPLETED",
         )
         db.add(db_settlement)
-        await db.flush()
-        await rebuild_balances(db, settlement.group_id)
         await db.commit()
         await db.refresh(db_settlement)
+        background_tasks.add_task(create_audit_log_background, "Settlement", db_settlement.id, current_user.id, "CREATE")
         return db_settlement
 
-    balances_result = await db.execute(
-        select(models.Balance)
-        .where(
-            models.Balance.from_user_id == settlement.payer_id,
-            models.Balance.to_user_id == settlement.payee_id,
-        )
-        .order_by(models.Balance.amount.desc())
+    balances = await compute_balances_for_user(db, settlement.payer_id)
+    filtered_balances = sorted(
+        [b for b in balances if b["from_user_id"] == settlement.payer_id and b["to_user_id"] == settlement.payee_id],
+        key=lambda x: x["amount"],
+        reverse=True
     )
-    balances = balances_result.scalars().all()
 
-    outstanding_amount = sum(balance.amount for balance in balances)
+    outstanding_amount = sum(balance["amount"] for balance in filtered_balances)
     outstanding_cents = to_cents(outstanding_amount)
     if outstanding_cents <= 0:
         raise HTTPException(status_code=400, detail="No outstanding balance exists in this payer/payee direction.")
@@ -305,31 +340,29 @@ async def create_settlement(
     remaining = settlement.amount
     groups_to_rebuild = set()
     first_settlement = None
-    for balance in balances:
+    for balance in filtered_balances:
         if remaining <= 0.01:
             break
-        settle_amount = min(balance.amount, remaining)
+        settle_amount = min(balance["amount"], remaining)
         remaining -= settle_amount
 
         sub_settlement = models.Settlement(
-            group_id=balance.group_id,
+            group_id=balance["group_id"],
             payer_id=settlement.payer_id,
             payee_id=settlement.payee_id,
             amount=settle_amount,
             currency=settlement.currency,
-            date=datetime.datetime.utcnow(),
+            date=datetime.datetime.now(datetime.timezone.utc),
             status="COMPLETED",
         )
         db.add(sub_settlement)
         await db.flush()
         if first_settlement is None:
             first_settlement = sub_settlement
-        groups_to_rebuild.add(balance.group_id)
 
-    for group_id in groups_to_rebuild:
-        await rebuild_balances(db, group_id)
     await db.commit()
     await db.refresh(first_settlement)
+    background_tasks.add_task(create_audit_log_background, "Settlement", first_settlement.id, current_user.id, "CREATE")
     return first_settlement
 
 
@@ -408,46 +441,4 @@ async def get_expense_audit_logs(
     return logs_result.scalars().all()
 
 
-def log_change(mapper, connection, target, action):
-    target_type = target.__class__.__name__
-    if target_type not in ["Expense", "Group", "Settlement"]:
-        return
 
-    user_id = None
-    if hasattr(target, "created_by"):
-        user_id = target.created_by
-    elif hasattr(target, "payer_id"):
-        user_id = target.payer_id
-
-    changes_dict = {column.name: getattr(target, column.name) for column in target.__table__.columns}
-    changes = json.dumps(jsonable_encoder(changes_dict))
-
-    connection.execute(
-        models.AuditLog.__table__.insert().values(
-            user_id=user_id,
-            action=action,
-            target_type=target_type,
-            target_id=target.id,
-            changes=changes,
-        )
-    )
-
-
-@event.listens_for(models.Expense, "after_insert")
-def receive_expense_after_insert(mapper, connection, target):
-    log_change(mapper, connection, target, "CREATE")
-
-
-@event.listens_for(models.Expense, "after_update")
-def receive_expense_after_update(mapper, connection, target):
-    log_change(mapper, connection, target, "UPDATE")
-
-
-@event.listens_for(models.Group, "after_insert")
-def receive_group_after_insert(mapper, connection, target):
-    log_change(mapper, connection, target, "CREATE")
-
-
-@event.listens_for(models.Settlement, "after_insert")
-def receive_settlement_after_insert(mapper, connection, target):
-    log_change(mapper, connection, target, "CREATE")

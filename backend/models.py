@@ -1,7 +1,26 @@
 from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Float, DateTime, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
-import datetime
+from datetime import datetime, timezone
+from sqlalchemy.types import TypeDecorator
 from .database import Base
+
+class Currency(TypeDecorator):
+    """
+    SQLAlchemy TypeDecorator to store currency as Integer cents in DB,
+    but treat as Float dollars in Python.
+    """
+    impl = Integer
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return int(round(value * 100))
+        return None
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return value / 100.0
+        return None
 
 class User(Base):
     __tablename__ = "users"
@@ -12,7 +31,7 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     auth_provider = Column(String, default="local")
     auth_provider_id = Column(String, nullable=True, unique=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     groups = relationship("GroupMember", back_populates="user")
     expenses_created = relationship("Expense", back_populates="creator")
@@ -24,7 +43,7 @@ class Group(Base):
     description = Column(String, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))
     simplify_debts = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     members = relationship("GroupMember", back_populates="group")
     expenses = relationship("Expense", back_populates="group")
@@ -33,7 +52,7 @@ class GroupMember(Base):
     __tablename__ = "group_members"
     group_id = Column(Integer, ForeignKey("groups.id"), primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    joined_at = Column(DateTime, default=datetime.datetime.utcnow)
+    joined_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     group = relationship("Group", back_populates="members")
     user = relationship("User", back_populates="groups")
@@ -45,13 +64,13 @@ class Expense(Base):
     plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))
     description = Column(String)
-    total_amount = Column(Float)
+    total_amount = Column(Currency)
     currency = Column(String, default="USD")
-    date = Column(DateTime, default=datetime.datetime.utcnow)
+    date = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     category = Column(String, nullable=True, default="Entertainment / Drinks")
     has_receipt = Column(Boolean, default=False)
     receipt_breakdown = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     group = relationship("Group", back_populates="expenses")
     creator = relationship("User", back_populates="expenses_created")
@@ -68,12 +87,12 @@ class Plan(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
     name = Column(String)
-    start_date = Column(DateTime)
-    end_date = Column(DateTime)
+    start_date = Column(DateTime(timezone=True))
+    end_date = Column(DateTime(timezone=True))
     total_budget = Column(Integer) # In cents
     status = Column(String, default="draft") # draft, active, completed
     type = Column(String, default="custom") # trip, monthly_budget, custom
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
     group = relationship("Group")
@@ -135,9 +154,9 @@ class ExpenseParticipant(Base):
     __tablename__ = "expense_participants"
     id = Column(Integer, primary_key=True, index=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
-    amount_paid = Column(Float, default=0.0)
-    amount_owed = Column(Float, default=0.0)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    amount_paid = Column(Currency, default=0.0)
+    amount_owed = Column(Currency, default=0.0)
 
     expense = relationship("Expense", back_populates="participants")
     user = relationship("User")
@@ -151,14 +170,14 @@ class ExpenseParticipant(Base):
 class Settlement(Base):
     __tablename__ = "settlements"
     id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
-    payer_id = Column(Integer, ForeignKey("users.id"))
-    payee_id = Column(Integer, ForeignKey("users.id"))
-    amount = Column(Float)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
+    payer_id = Column(Integer, ForeignKey("users.id"), index=True)
+    payee_id = Column(Integer, ForeignKey("users.id"), index=True)
+    amount = Column(Currency)
     currency = Column(String, default="USD")
-    date = Column(DateTime, default=datetime.datetime.utcnow)
+    date = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     status = Column(String, default="COMPLETED")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     group = relationship("Group")
     payer = relationship("User", foreign_keys=[payer_id])
@@ -170,27 +189,6 @@ class Settlement(Base):
         CheckConstraint("status IN ('COMPLETED')", name="ck_settlements_status"),
     )
 
-class Balance(Base):
-    """
-    A materialized view or computed table of current debt edges.
-    Simplifies querying 'Who owes who'.
-    """
-    __tablename__ = "balances"
-    id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
-    from_user_id = Column(Integer, ForeignKey("users.id")) # Ower
-    to_user_id = Column(Integer, ForeignKey("users.id"))   # Payee
-    amount = Column(Float)
-    
-    from_user = relationship("User", foreign_keys=[from_user_id])
-    to_user = relationship("User", foreign_keys=[to_user_id])
-    group = relationship("Group", foreign_keys=[group_id])
-
-    __table_args__ = (
-        UniqueConstraint("group_id", "from_user_id", "to_user_id", name="uq_balances_group_from_to"),
-        CheckConstraint("amount >= 0", name="ck_balances_amount_non_negative"),
-        CheckConstraint("from_user_id != to_user_id", name="ck_balances_distinct_users"),
-    )
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -200,7 +198,7 @@ class AuditLog(Base):
     target_type = Column(String) # e.g., "Expense", "Group", "Settlement"
     target_id = Column(Integer)
     changes = Column(String, nullable=True) # JSON representation of changes or state
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
 
@@ -210,8 +208,8 @@ class Friendship(Base):
     requester_id = Column(Integer, ForeignKey("users.id"))
     addressee_id = Column(Integer, ForeignKey("users.id"))
     status = Column(String, default="PENDING") # PENDING, ACCEPTED, REJECTED, REMOVED
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     requester = relationship("User", foreign_keys=[requester_id])
     addressee = relationship("User", foreign_keys=[addressee_id])

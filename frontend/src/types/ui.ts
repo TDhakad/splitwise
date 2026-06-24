@@ -15,7 +15,7 @@ export type AppTab = ActiveTab;
 export type AuthView = 'login' | 'signup';
 export type PreplanningView = 'dashboard' | 'create' | 'detail' | 'insights';
 
-export type SplitMethod = 'equal' | 'unequal' | 'percentage';
+export type SplitMethod = 'equal' | 'unequal' | 'percentage' | 'shares';
 export type ItemSplitMethod = 'equal' | 'unequal' | 'shares';
 export type ExpenseStep = 'add' | 'friends' | 'split' | 'review-receipt' | 'itemized-split';
 export type ExpenseEntryMode = 'manual' | 'scan';

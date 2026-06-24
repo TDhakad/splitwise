@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Literal, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 class ExpenseCategory(str, Enum):

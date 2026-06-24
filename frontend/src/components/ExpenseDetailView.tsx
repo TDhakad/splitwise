@@ -247,6 +247,19 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                            const u = users.find(usr => usr.id === log.user_id) || { name: 'Someone' };
                            const isYou = log.user_id === currentUserId;
                            const actionStr = log.action === 'CREATE' ? 'created this expense' : 'updated this expense';
+                           
+                           let parsedChanges: unknown[] = [];
+                           try {
+                              if (log.changes) {
+                                 const parsed = JSON.parse(log.changes);
+                                 if (Array.isArray(parsed)) {
+                                    parsedChanges = parsed;
+                                 }
+                              }
+                           } catch (_e) {
+                              // Ignore older JSON dumps
+                           }
+
                            return (
                               <div key={log.id} className="relative pl-6">
                                  <span className={clsx("absolute -left-[11px] top-1 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center", idx === auditLogs.length - 1 ? "bg-[#EAF5F2]" : "bg-gray-200")}>
@@ -254,6 +267,36 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                                  </span>
                                  <p className="text-sm text-gray-900"><span className="font-bold">{isYou ? 'You' : u.name}</span> {actionStr}</p>
                                  <p className="text-[11px] text-gray-500 mt-1">{new Date(log.timestamp).toLocaleDateString()} &bull; {new Date(log.timestamp).toLocaleTimeString()}</p>
+                                 
+                                 {parsedChanges.length > 0 && (
+                                    <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2.5">
+                                       {parsedChanges.map((change, cIdx) => {
+                                          if (change.type === 'field') {
+                                             const fieldName = change.field.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+                                             const isMoney = change.field === 'total_amount';
+                                             const oldVal = isMoney ? `$${Number(change.old).toFixed(2)}` : String(change.old || 'None');
+                                             const newVal = isMoney ? `$${Number(change.new).toFixed(2)}` : String(change.new || 'None');
+                                             return (
+                                                <div key={cIdx} className="text-xs text-gray-600 flex items-start gap-2 leading-tight">
+                                                   <span className="text-gray-400 mt-[1px]">&bull;</span>
+                                                   <span>Changed <span className="font-bold text-gray-700">{fieldName}</span> from <span className="line-through text-gray-400 mx-0.5">{oldVal}</span> to <span className="font-bold text-gray-900">{newVal}</span></span>
+                                                </div>
+                                             );
+                                          } else if (change.type === 'split') {
+                                             const splitUser = users.find(usr => usr.id === change.user_id) || { id: -1, name: 'Someone' };
+                                             const splitName = splitUser.id === currentUserId ? 'You' : splitUser.name;
+                                             const fieldName = change.field === 'amount_owed' ? 'Owed amount' : 'Paid amount';
+                                             return (
+                                                <div key={cIdx} className="text-xs text-gray-600 flex items-start gap-2 leading-tight">
+                                                   <span className="text-gray-400 mt-[1px]">&bull;</span>
+                                                   <span>Updated split for <span className="font-bold text-gray-700">{splitName}</span>: {fieldName} changed from <span className="line-through text-gray-400 mx-0.5">${Number(change.old).toFixed(2)}</span> to <span className="font-bold text-gray-900">${Number(change.new).toFixed(2)}</span></span>
+                                                </div>
+                                             );
+                                          }
+                                          return null;
+                                       })}
+                                    </div>
+                                 )}
                               </div>
                            );
                         })}

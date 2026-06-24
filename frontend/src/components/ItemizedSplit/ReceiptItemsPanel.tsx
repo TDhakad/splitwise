@@ -14,6 +14,7 @@ interface ReceiptItemsPanelProps {
   onSetAllForMe: () => void;
   onToggleUser: (itemIndex: number, userId: number) => void;
   onEditItem: (itemIndex: number) => void;
+  onAddMember: () => void;
 }
 
 export default function ReceiptItemsPanel({
@@ -25,6 +26,7 @@ export default function ReceiptItemsPanel({
   onSetAllForMe,
   onToggleUser,
   onEditItem,
+  onAddMember,
 }: ReceiptItemsPanelProps) {
   return (
     <div className="flex-1 w-full bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -33,9 +35,18 @@ export default function ReceiptItemsPanel({
           <h2 className="text-xl font-bold text-gray-900">Receipt Items</h2>
           <p className="text-sm text-gray-500 mt-1">Tap avatars to assign items.</p>
         </div>
-        <button onClick={onSetAllForMe} className="text-sm font-semibold text-[#007A64] hover:text-[#006150] transition-colors">
-          Select All for Me
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onAddMember}
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#007A64] border border-[#007A64]/30 bg-[#EAF5F2] hover:bg-[#007A64] hover:text-white rounded-full px-3 py-1.5 transition-all"
+          >
+            <MSIcon name="person_add" style={{ fontSize: 16 }} />
+            Add Member
+          </button>
+          <button onClick={onSetAllForMe} className="text-sm font-semibold text-[#007A64] hover:text-[#006150] transition-colors">
+            Select All for Me
+          </button>
+        </div>
       </div>
 
       <div className="divide-y divide-gray-100">
@@ -74,12 +85,18 @@ export default function ReceiptItemsPanel({
                 className={clsx(
                   "w-full text-left rounded-xl px-4 py-2.5 text-sm flex items-center gap-2 transition-colors",
                   splitInfo.alert
-                    ? "bg-red-50 text-red-600 hover:bg-red-100"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+                    : "bg-white border border-gray-200 text-gray-700 hover:border-[#007A64] hover:text-[#007A64] hover:bg-[#EAF5F2]"
                 )}
               >
-                {splitInfo.alert ? <MSIcon name="error_outline" style={{fontSize: 16}} /> : <MSIcon name="call_split" style={{fontSize: 16}} />}
-                {splitInfo.text}
+                {splitInfo.alert
+                  ? <MSIcon name="error_outline" style={{ fontSize: 16 }} />
+                  : <MSIcon name="edit" style={{ fontSize: 15 }} />
+                }
+                <span className="flex-1">
+                  {splitInfo.alert ? splitInfo.text : `Edit split · ${splitInfo.text}`}
+                </span>
+                {!splitInfo.alert && <MSIcon name="chevron_right" style={{ fontSize: 18 }} className="text-gray-400" />}
               </button>
             </div>
           );

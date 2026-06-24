@@ -19,6 +19,12 @@ export function calculateSplitPreview(
     return activeIds.reduce<NumberById>((acc, id) => ({ ...acc, [id]: parseAmount(customValues[id]) }), {});
   }
 
+  if (splitMethod === 'shares') {
+    const totalShares = activeIds.reduce((sum, id) => sum + parseAmount(customValues[id]), 0);
+    if (totalShares === 0) return activeIds.reduce<NumberById>((acc, id) => ({ ...acc, [id]: 0 }), {});
+    return activeIds.reduce<NumberById>((acc, id) => ({ ...acc, [id]: (parseAmount(customValues[id]) / totalShares) * total }), {});
+  }
+
   return activeIds.reduce<NumberById>((acc, id) => ({ ...acc, [id]: (parseAmount(customValues[id]) / 100) * total }), {});
 }
 
@@ -28,6 +34,7 @@ export function getSplitValidation(
   activeIds: number[],
   runningSum: number,
   pctSum: number | null,
+  customValues?: StringById,
 ): string {
   if (!total || total <= 0) return '';
   if (!activeIds.length) return 'Select at least one person.';
@@ -36,6 +43,10 @@ export function getSplitValidation(
   }
   if (splitMethod === 'percentage' && pctSum !== null && Math.abs(pctSum - 100) > 0.1) {
     return `Percentages sum to ${pctSum.toFixed(1)}%, need 100%.`;
+  }
+  if (splitMethod === 'shares') {
+    const totalShares = activeIds.reduce((sum, id) => sum + parseAmount(customValues?.[id] || '0'), 0);
+    if (totalShares <= 0) return 'Enter at least one share.';
   }
   return '';
 }

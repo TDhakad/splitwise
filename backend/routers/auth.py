@@ -42,7 +42,12 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     if not user or not password_ok:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={
+        "sub": user.email,
+        "user_id": user.id,
+        "name": user.name,
+        "avatar_url": user.avatar_url
+    })
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -71,5 +76,10 @@ async def google_auth(auth_req: schemas.GoogleAuthRequest, db: AsyncSession = De
         await db.commit()
         await db.refresh(user)
 
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={
+        "sub": user.email,
+        "user_id": user.id,
+        "name": user.name,
+        "avatar_url": user.avatar_url
+    })
     return {"access_token": access_token, "token_type": "bearer"}

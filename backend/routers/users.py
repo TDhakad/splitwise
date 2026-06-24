@@ -85,7 +85,7 @@ async def send_friend_request(
             existing.status = "PENDING"
             existing.requester_id = current_user.id
             existing.addressee_id = addressee.id
-            existing.updated_at = datetime.datetime.utcnow()
+            existing.updated_at = datetime.datetime.now(datetime.timezone.utc)
             await db.commit()
             await db.refresh(existing)
             return existing
@@ -123,7 +123,7 @@ async def update_friend_request(
         raise HTTPException(status_code=403, detail="Not authorized to remove this friendship")
 
     friendship.status = status
-    friendship.updated_at = datetime.datetime.utcnow()
+    friendship.updated_at = datetime.datetime.now(datetime.timezone.utc)
     await db.commit()
     await db.refresh(friendship)
     return friendship

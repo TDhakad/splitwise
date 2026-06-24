@@ -4,14 +4,17 @@ import MSIcon from './MSIcon';
 import ReviewReceiptStep from './ReviewReceiptStep';
 import ItemizedSplitStep from './ItemizedSplitStep';
 import ManualExpenseEntry from './AddExpense/ManualExpenseEntry';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import ScanReceiptEntry from './AddExpense/ScanReceiptEntry';
 import SelectFriendsStep from './AddExpense/SelectFriendsStep';
 import SplitOptionsStep from './AddExpense/SplitOptionsStep';
 import { apiFetch, getErrorMessage } from '../lib/constants';
 import { useCreateExpense } from '../features/expenses/api';
+import { usePlans } from '../features/preplanning/api';
 import { buildExpenseParticipants, calculateSplitPreview, getSplitValidation, parseAmount } from '../features/expenses/splitUtils';
 import type { ChangeEvent } from 'react';
 import type { ExpenseCreate, ExpenseParticipantBase, GroupDetail, Plan, ReceiptBreakdown, User } from '../types/api';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { BooleanById, ExpenseEntryMode, ExpenseStep, ReceiptReviewData, ReceiptScanResponse, SplitMethod, StringById } from '../types/ui';
 
 interface AddExpenseFlowProps {
@@ -26,7 +29,6 @@ interface AddExpenseFlowProps {
 
 export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx, planCtx, onClose, onSave }: AddExpenseFlowProps) {
   const [step, setStep] = useState<ExpenseStep>('add');
-  const [entryMode, setEntryMode] = useState<ExpenseEntryMode>('manual');
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptReviewData | null>(null);
   const [receiptBreakdown, setReceiptBreakdown] = useState<ReceiptBreakdown | null>(null);
@@ -34,14 +36,15 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [groupId] = useState(groupCtx ? String(groupCtx.id) : '');
-  const [planId] = useState(planCtx ? String(planCtx.id) : '');
+  const [groupId, setGroupId] = useState(groupCtx ? String(groupCtx.id) : '');
+  const [planId, setPlanId] = useState(planCtx ? String(planCtx.id) : '');
   const [payerId, setPayerId] = useState(currentUserId);
   const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
   const [involvedUsers, setInvolvedUsers] = useState<BooleanById>({ [currentUserId]: true });
   const [customValues, setCustomValues] = useState<StringById>({});
   const [error, setError] = useState('');
   const createExpense = useCreateExpense();
+  const { data: plans = [] } = usePlans();
 
   const selectedGroup = groupCtx || groups.find(g => g.id === parseInt(groupId));
   const expenseUsers = selectedGroup?.members?.length
@@ -54,10 +57,12 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   const pctSum = splitMethod === 'percentage' ? activeIds.reduce((sum, id) => sum + parseAmount(customValues[id]), 0) : null;
   const validationMsg = getSplitValidation(splitMethod, total, activeIds, runningSum, pctSum);
   const canSave = Boolean(description.trim() && total > 0 && activeIds.length > 0 && !validationMsg);
+  
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const splitLabel = splitMethod === 'equal' ? 'Equally' : splitMethod === 'unequal' ? 'Unequally' : 'By %';
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleReset = () => {
-    setEntryMode('manual');
     setDescription('');
     setAmount('');
     setPayerId(currentUserId);
@@ -144,7 +149,6 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
 
     setInvolvedUsers(newInvolved);
     setCustomValues(newCustomValues);
-    setEntryMode('manual');
     setStep('add');
     if (!description) setDescription('Receipt Scan');
   };
@@ -157,68 +161,60 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
     return <ItemizedSplitStep receiptData={receiptData} users={expenseUsers} involvedUsers={involvedUsers} currentUserId={currentUserId} payerId={payerId} onSave={handleFinishItemizedSplit} onClose={onClose} onBack={() => setStep('review-receipt')} />;
   }
 
+  const handleBackOrClose = () => {
+    if (receiptData) {
+      setStep('itemized-split');
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={handleBackOrClose} />
       <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
         <div className="bg-white sm:rounded-3xl w-full sm:max-w-md h-full sm:h-auto shadow-2xl flex flex-col overflow-hidden relative"
           style={{ maxHeight: '100dvh', animation: 'slideUp 0.3s cubic-bezier(0,0,0.2,1)' }}>
           {step === 'add' && (
             <>
               <header className="sticky top-0 w-full z-10 bg-white border-b border-gray-200 flex flex-col px-5 pt-5 sm:pt-4">
-                <div className="flex items-center justify-between mb-4">
-                  <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95 transition-all" aria-label="Close add expense"><MSIcon name="close" className="text-gray-900 text-2xl" /></button>
-                  <h1 className="font-bold text-3xl sm:text-lg text-gray-900">Add Expense</h1>
-                  <div className="flex items-center gap-2">
-                    <button onClick={handleReset} className="font-bold text-sm px-3 py-2 rounded-lg text-[#007A64] hover:bg-[#EAF5F2] transition-all active:scale-95">Reset</button>
-                    <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("hidden sm:block font-bold text-sm px-4 py-2 rounded-lg transition-all active:scale-95", canSave ? "text-[#007A64] hover:bg-[#EAF5F2]" : "text-gray-400 cursor-not-allowed")}>Save</button>
-                  </div>
-                </div>
-                <div className="flex gap-1 bg-gray-100 rounded-2xl p-1 mb-4 sm:bg-transparent sm:rounded-none sm:p-0 sm:mb-0 sm:gap-6">
-                  <button onClick={() => setEntryMode('manual')} className={clsx("flex-1 sm:flex-none py-3 sm:pb-3 sm:py-0 px-3 sm:px-2 text-sm font-bold rounded-xl sm:rounded-none sm:border-b-2 transition-colors flex items-center justify-center gap-2", entryMode === 'manual' ? "bg-[#007A64] text-white sm:bg-transparent sm:border-[#007A64] sm:text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
-                    <MSIcon name="edit" style={{ fontSize: 18 }} /> Manual Entry
+                <div className="flex items-center justify-between">
+                  <button onClick={handleBackOrClose} className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:scale-95 transition-all" aria-label={receiptData ? "Back to itemized split" : "Close add expense"}>
+                    <MSIcon name={receiptData ? "arrow_back" : "close"} className="text-gray-900 text-2xl" />
                   </button>
-                  <button onClick={() => setEntryMode('scan')} className={clsx("flex-1 sm:flex-none py-3 sm:pb-3 sm:py-0 px-3 sm:px-2 text-sm font-bold rounded-xl sm:rounded-none sm:border-b-2 transition-colors flex items-center justify-center gap-2", entryMode === 'scan' ? "bg-[#007A64] text-white sm:bg-transparent sm:border-[#007A64] sm:text-[#007A64]" : "border-transparent text-gray-500 hover:text-gray-700")}>
-                    <MSIcon name="receipt_long" style={{ fontSize: 18 }} /> Scan Receipt
-                  </button>
+                  <h1 className="font-bold text-3xl sm:text-lg text-[#007A64]">Add Expense</h1>
+                  <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("font-bold text-sm px-4 py-2 rounded-lg transition-all active:scale-95", canSave ? "text-[#007A64] hover:bg-[#EAF5F2]" : "text-gray-400 cursor-not-allowed")}>SAVE</button>
                 </div>
               </header>
               {error && <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">{error}</div>}
-              {entryMode === 'manual' && (
-                <ManualExpenseEntry
-                  users={expenseUsers}
-                  currentUserId={currentUserId}
-                  involvedUsers={involvedUsers}
-                  activeIds={activeIds}
-                  description={description}
-                  amount={amount}
-                  payerId={payerId}
-                  splitLabel={splitLabel}
-                  onDescriptionChange={setDescription}
-                  onAmountChange={setAmount}
-                  onPayerChange={setPayerId}
-                  onSelectFriends={() => setStep('friends')}
-                  onSelectSplit={() => setStep('split')}
-                />
-              )}
-              {entryMode === 'scan' && (
-                <ScanReceiptEntry
-                  users={expenseUsers}
-                  currentUserId={currentUserId}
-                  involvedUsers={involvedUsers}
-                  activeIds={activeIds}
-                  isProcessingReceipt={isProcessingReceipt}
-                  onFileUpload={handleFileUpload}
-                  onSelectFriends={() => setStep('friends')}
-                />
-              )}
-              {entryMode === 'manual' && (
-                <div className="sm:hidden sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-                  <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("w-full min-h-16 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]", canSave ? "bg-[#007A64] text-white shadow-lg" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
-                    Add Expense <MSIcon name="arrow_forward" />
-                  </button>
-                </div>
-              )}
+              <ManualExpenseEntry
+                users={expenseUsers}
+                groups={groups}
+                plans={plans}
+                currentUserId={currentUserId}
+                involvedUsers={involvedUsers}
+                activeIds={activeIds}
+                description={description}
+                amount={amount}
+                payerId={payerId}
+                groupId={groupId ? parseInt(groupId) : null}
+                planId={planId ? parseInt(planId) : null}
+                splitPreview={preview}
+                isProcessingReceipt={isProcessingReceipt}
+                onDescriptionChange={setDescription}
+                onAmountChange={setAmount}
+                onPayerChange={setPayerId}
+                onGroupChange={(id) => setGroupId(id ? String(id) : '')}
+                onPlanChange={(id) => setPlanId(id ? String(id) : '')}
+                onSelectFriends={() => setStep('friends')}
+                onSelectSplit={() => setStep('split')}
+                onFileUpload={handleFileUpload}
+              />
+              <div className="sm:hidden sticky bottom-0 bg-black backdrop-blur-md p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+                <button onClick={() => handleSave()} disabled={createExpense.isPending || !canSave} className={clsx("w-full min-h-16 rounded-2xl font-bold text-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98]", canSave ? "bg-[#007A64] text-white shadow-lg" : "bg-gray-800 text-gray-500 cursor-not-allowed")}>
+                  Save Expense
+                </button>
+              </div>
             </>
           )}
 

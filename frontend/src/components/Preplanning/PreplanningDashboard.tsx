@@ -18,6 +18,15 @@ export default function PreplanningDashboard({ onNavigate }: PlanNavigationProps
   const plans = plansQuery.data ?? [];
 
   const totalAllocated = plans.reduce((acc, p) => acc + (p.total_budget || 0), 0) / 100;
+  const totalSpent = plans.reduce((acc, p) => acc + (p.total_spent || 0), 0) / 100;
+  const overallSpentPct = totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0;
+
+  const now = new Date();
+  const futurePlans = plans.filter(p => p.end_date && new Date(p.end_date) >= now);
+  futurePlans.sort((a, b) => new Date(a.end_date!).getTime() - new Date(b.end_date!).getTime());
+  const nearestPlan = futurePlans[0] || null;
+  const nearestPlanDate = nearestPlan?.end_date ? new Date(nearestPlan.end_date) : null;
+  const nearestPlanDays = nearestPlanDate ? Math.ceil((nearestPlanDate.getTime() - now.getTime()) / (1000 * 3600 * 24)) : 0;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -58,32 +67,39 @@ export default function PreplanningDashboard({ onNavigate }: PlanNavigationProps
         <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-bold text-gray-500 tracking-widest uppercase">Unassigned Funds</h3>
-              <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
-                <MSIcon name="water_drop" className="text-lg" />
+              <h3 className="text-xs font-bold text-gray-500 tracking-widest uppercase">Overall Spent</h3>
+              <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center">
+                <MSIcon name="shopping_cart" className="text-lg" />
               </div>
             </div>
             <div className="text-4xl font-black text-gray-900 tracking-tight">
-              $3,120<span className="text-gray-400">.50</span>
+              $<span className="text-orange-600">{totalSpent.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             </div>
           </div>
           <div className="mt-6">
             <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-purple-500 w-[20%] rounded-full" />
+              <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${Math.min(overallSpentPct, 100)}%` }} />
             </div>
-            <div className="mt-2 text-xs font-semibold text-gray-500 text-right">20% of total portfolio</div>
+            <div className="mt-2 flex justify-between text-xs font-semibold text-gray-500">
+              <span>{overallSpentPct.toFixed(1)}% spent</span>
+              <span>${(totalAllocated - totalSpent).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} left</span>
+            </div>
           </div>
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex items-center gap-4">
           <div className="w-14 h-14 bg-gray-50 border border-gray-200 rounded-xl flex flex-col items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">May</span>
-            <span className="text-lg font-black text-gray-900">15</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{nearestPlanDate ? nearestPlanDate.toLocaleString('default', { month: 'short' }) : '-'}</span>
+            <span className="text-lg font-black text-gray-900">{nearestPlanDate ? nearestPlanDate.getDate() : '-'}</span>
           </div>
           <div>
-            <h3 className="text-xs font-bold text-[#007A64] tracking-widest uppercase mb-1">Upcoming Funding Goal</h3>
-            <h4 className="font-bold text-gray-900 text-lg leading-tight">Summer Trip Paris</h4>
-            <p className="text-xs text-gray-500 font-medium mt-1">Auto-transfer $500 scheduled.</p>
+            <h3 className="text-xs font-bold text-[#007A64] tracking-widest uppercase mb-1">Nearest Deadline</h3>
+            <h4 className="font-bold text-gray-900 text-lg leading-tight truncate w-32 md:w-40" title={nearestPlan?.name}>{nearestPlan ? nearestPlan.name : 'No upcoming goals'}</h4>
+            {nearestPlan ? (
+              <p className="text-xs text-gray-500 font-medium mt-1">In {nearestPlanDays} day{nearestPlanDays !== 1 ? 's' : ''}</p>
+            ) : (
+              <p className="text-xs text-gray-500 font-medium mt-1">Set an end date on a plan</p>
+            )}
           </div>
         </div>
       </div>

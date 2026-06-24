@@ -81,7 +81,7 @@ export default function PlanDetail({ planId, currentUserId, onNavigate, onAddExp
       await createPredecision.mutateAsync({
         title: newPredTitle,
         category: newPredCategory,
-        expected_amount: parseInt(newPredAmount.replace(/,/g, ''), 10) * 100,
+        expected_amount: Math.round(Number(newPredAmount.replace(/,/g, '')) * 100),
         status: 'expected'
       });
       setNewPredTitle('');
@@ -102,7 +102,7 @@ export default function PlanDetail({ planId, currentUserId, onNavigate, onAddExp
     }));
     currentAllocs.push({
       category: newAllocCategory,
-      allocated_amount: parseInt(newAllocAmount.replace(/,/g, ''), 10) * 100
+      allocated_amount: Math.round(Number(newAllocAmount.replace(/,/g, '')) * 100)
     });
 
     try {

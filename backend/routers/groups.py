@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -7,7 +7,7 @@ from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
 from ..dependencies import bounded_limit, require_group_manager, require_group_member
-from ..services import rebuild_balances
+from ..services import compute_balances_for_group, create_audit_log_background
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 @router.post("/", response_model=schemas.Group)
 async def create_group(
     group: schemas.GroupCreate,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -24,6 +25,7 @@ async def create_group(
 
     db.add(models.GroupMember(group_id=db_group.id, user_id=current_user.id))
     await db.commit()
+    background_tasks.add_task(create_audit_log_background, "Group", db_group.id, current_user.id, "CREATE")
     await db.refresh(db_group)
     return db_group
 
@@ -122,8 +124,8 @@ async def read_group_balances(
     db: AsyncSession = Depends(get_db),
 ):
     await require_group_member(db, group_id, current_user.id)
-    balances_result = await db.execute(select(models.Balance).where(models.Balance.group_id == group_id))
-    return balances_result.scalars().all()
+    balances = await compute_balances_for_group(db, group_id)
+    return balances
 
 
 @router.post("/{group_id}/members/{user_id}")
@@ -155,6 +157,5 @@ async def toggle_simplify_debts(
 ):
     group = await require_group_manager(db, group_id, current_user.id)
     group.simplify_debts = enable
-    await rebuild_balances(db, group_id)
     await db.commit()
     return {"status": "success", "simplify_debts": enable}

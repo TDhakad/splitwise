@@ -6,14 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import models
 
 
+from .database import SessionLocal
+import json
+from . import schemas
+
 def to_cents(amount: float) -> int:
     return round(amount * 100)
 
-
-async def rebuild_balances(db: AsyncSession, group_id: int | None) -> None:
-    await db.execute(delete(models.Balance).where(models.Balance.group_id == group_id))
-    await db.flush()
-
+async def compute_balances_for_group(db: AsyncSession, group_id: int | None) -> list[dict]:
     group = await db.get(models.Group, group_id) if group_id is not None else None
     simplify_debts = group.simplify_debts if group else True
     balance_rows = []
@@ -40,7 +40,7 @@ async def rebuild_balances(db: AsyncSession, group_id: int | None) -> None:
         )
 
         for user_id, net_amount in participant_result.all():
-            nets[user_id] += net_amount or 0
+            nets[user_id] += (net_amount or 0)
         for payer_id, payee_id, amount in settlements:
             nets[payer_id] += amount
             nets[payee_id] -= amount
@@ -57,14 +57,12 @@ async def rebuild_balances(db: AsyncSession, group_id: int | None) -> None:
                 settle = min(debtor_amount, creditor_amount)
                 debtor_amount -= settle
                 creditors[creditor_id] -= settle
-                balance_rows.append(
-                    models.Balance(
-                        group_id=group_id,
-                        from_user_id=debtor_id,
-                        to_user_id=creditor_id,
-                        amount=settle,
-                    )
-                )
+                balance_rows.append({
+                    "group_id": group_id,
+                    "from_user_id": debtor_id,
+                    "to_user_id": creditor_id,
+                    "amount": settle,
+                })
     else:
         pairwise = defaultdict(lambda: defaultdict(float))
 
@@ -116,24 +114,63 @@ async def rebuild_balances(db: AsyncSession, group_id: int | None) -> None:
                     continue
                 net_ab = amount_ab - pairwise.get(second_user_id, {}).get(first_user_id, 0)
                 if net_ab > 0.01:
-                    balance_rows.append(
-                        models.Balance(
-                            group_id=group_id,
-                            from_user_id=first_user_id,
-                            to_user_id=second_user_id,
-                            amount=net_ab,
-                        )
-                    )
+                    balance_rows.append({
+                        "group_id": group_id,
+                        "from_user_id": first_user_id,
+                        "to_user_id": second_user_id,
+                        "amount": net_ab,
+                    })
                 elif net_ab < -0.01:
-                    balance_rows.append(
-                        models.Balance(
-                            group_id=group_id,
-                            from_user_id=second_user_id,
-                            to_user_id=first_user_id,
-                            amount=-net_ab,
-                        )
-                    )
+                    balance_rows.append({
+                        "group_id": group_id,
+                        "from_user_id": second_user_id,
+                        "to_user_id": first_user_id,
+                        "amount": -net_ab,
+                    })
                 resolved.add((first_user_id, second_user_id))
 
-    db.add_all(balance_rows)
-    await db.flush()
+    return balance_rows
+
+async def compute_balances_for_user(db: AsyncSession, user_id: int) -> list[dict]:
+    # Find all groups where the user has an expense or is a member
+    group_ids_result = await db.execute(
+        select(models.Expense.group_id)
+        .join(models.ExpenseParticipant)
+        .where(models.ExpenseParticipant.user_id == user_id)
+        .distinct()
+    )
+    group_ids = {row[0] for row in group_ids_result.all()}
+    
+    # Also add groups where the user is a member, even if no expenses yet
+    member_groups_result = await db.execute(
+        select(models.GroupMember.group_id)
+        .where(models.GroupMember.user_id == user_id)
+    )
+    group_ids.update({row[0] for row in member_groups_result.all()})
+
+    all_balances = []
+    # Include group_id = None (non-group expenses)
+    if None not in group_ids:
+        group_ids.add(None)
+
+    for g_id in group_ids:
+        group_balances = await compute_balances_for_group(db, g_id)
+        # Filter balances to only those involving the user
+        user_balances = [
+            b for b in group_balances
+            if b["from_user_id"] == user_id or b["to_user_id"] == user_id
+        ]
+        all_balances.extend(user_balances)
+
+    return all_balances
+
+async def create_audit_log_background(target_type: str, target_id: int, user_id: int | None, action: str, changes: str | None = None):
+    async with SessionLocal() as db:
+        db.add(models.AuditLog(
+            user_id=user_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            changes=changes
+        ))
+        await db.commit()

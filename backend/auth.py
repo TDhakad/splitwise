@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -26,9 +26,9 @@ def get_password_hash(password):
 def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
@@ -51,12 +51,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get("sub")
-        if email is None:
+        user_id: int = payload.get("user_id")
+        name: str = payload.get("name")
+        avatar_url: str = payload.get("avatar_url")
+        if email is None or user_id is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    result = await db.execute(select(models.User).where(models.User.email == email))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise credentials_exception
+    
+    # Construct an in-memory user object directly from the JWT payload
+    user = models.User(
+        id=user_id,
+        email=email,
+        name=name,
+        avatar_url=avatar_url,
+        created_at=datetime.now(timezone.utc)
+    )
     return user

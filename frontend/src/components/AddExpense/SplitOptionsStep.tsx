@@ -38,9 +38,10 @@ export default function SplitOptionsStep({
   onBack,
   onSave,
 }: SplitOptionsStepProps) {
-  const tabs: SplitMethod[] = ['equal', 'unequal', 'percentage'];
-  const tabLabels: Record<SplitMethod, string> = { equal: 'Equal', unequal: 'Unequal', percentage: 'Percentage' };
+  const tabs: SplitMethod[] = ['equal', 'unequal', 'percentage', 'shares'];
+  const tabLabels: Record<SplitMethod, string> = { equal: 'Equal', unequal: 'Unequal', percentage: 'Percentage', shares: 'Shares' };
   const activeUsers = users.filter(u => activeIds.includes(u.id));
+  const sharesSum = splitMethod === 'shares' ? activeIds.reduce((sum, id) => sum + (parseFloat(customValues[id] ?? '0') || 0), 0) : null;
 
   return (
     <>
@@ -72,11 +73,15 @@ export default function SplitOptionsStep({
               <div className="flex items-center gap-3">
                 <MSIcon name="info" className={clsx("text-lg", validationMsg ? "text-red-500" : "text-gray-500")} />
                 <span className={clsx("text-sm font-medium", validationMsg ? "text-red-600" : "text-gray-700")}>
-                  {splitMethod === 'percentage' ? `${pctSum?.toFixed(1) ?? 0}% of 100%` : `Remaining: $${(total - runningSum).toFixed(2)}`}
+                  {splitMethod === 'percentage' 
+                    ? `${pctSum?.toFixed(1) ?? 0}% of 100%` 
+                    : splitMethod === 'shares'
+                    ? `${sharesSum ?? 0} total share${sharesSum === 1 ? '' : 's'}`
+                    : `Remaining: $${(total - runningSum).toFixed(2)}`}
                 </span>
               </div>
               <span className={clsx("text-xs font-bold tracking-widest uppercase", validationMsg ? "text-red-600" : "text-[#007A64]")}>
-                {validationMsg ? 'ERROR' : Math.abs(runningSum - total) < 0.01 && runningSum > 0 ? 'READY' : 'PENDING'}
+                {validationMsg ? 'ERROR' : ((splitMethod === 'unequal' && Math.abs(runningSum - total) < 0.01 && runningSum > 0) || splitMethod === 'shares') ? 'READY' : 'PENDING'}
               </span>
             </div>
           )}
@@ -123,6 +128,21 @@ export default function SplitOptionsStep({
                         style={{ fontVariantNumeric: 'tabular-nums' }}
                       />
                       <span className="text-lg text-gray-400 font-bold">%</span>
+                    </div>
+                  )}
+                  {splitMethod === 'shares' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                        value={customValues[u.id] || ''}
+                        onChange={e => setCustomValues(prev => ({ ...prev, [u.id]: e.target.value }))}
+                        className="w-16 bg-transparent border-b-2 border-gray-300 focus:border-[#007A64] py-1 text-right font-bold text-gray-900 outline-none transition-colors text-xl"
+                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                      />
+                      <span className="text-sm font-bold text-gray-400 uppercase">Part{Number(customValues[u.id] || 0) === 1 ? '' : 's'}</span>
                     </div>
                   )}
                 </div>

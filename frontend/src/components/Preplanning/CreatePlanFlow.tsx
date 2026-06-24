@@ -22,7 +22,7 @@ export default function CreatePlanFlow({ onNavigate }: PlanNavigationProps) {
         name,
         start_date: startDate + "T00:00:00Z",
         end_date: endDate + "T00:00:00Z",
-        total_budget: parseInt(totalBudget.replace(/,/g, ''), 10) * 100,
+        total_budget: Math.round(Number(totalBudget.replace(/,/g, '')) * 100),
         status: 'active',
         type: 'custom',
         group_id: groupId ? parseInt(groupId, 10) : null

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import MSIcon from './MSIcon';
 import EditItemSplitModal from './ItemizedSplit/EditItemSplitModal';
 import ReceiptItemsPanel from './ItemizedSplit/ReceiptItemsPanel';
 import SplitSummaryPanel from './ItemizedSplit/SplitSummaryPanel';
+import SelectFriendsStep from './AddExpense/SelectFriendsStep';
 import useItemizedSplit from './ItemizedSplit/useItemizedSplit';
 import type { ExpenseParticipantBase, ReceiptBreakdown, User } from '../types/api';
 import type { BooleanById, ReceiptReviewData } from '../types/ui';
@@ -18,7 +20,9 @@ interface ItemizedSplitStepProps {
   onBack: () => void;
 }
 
-export default function ItemizedSplitStep({ receiptData, users, involvedUsers, currentUserId, payerId, initialBreakdown, onSave, onClose, onBack }: ItemizedSplitStepProps) {
+export default function ItemizedSplitStep({ receiptData, users, involvedUsers: initialInvolvedUsers, currentUserId, payerId, initialBreakdown, onSave, onClose, onBack }: ItemizedSplitStepProps) {
+  const [involvedUsers, setInvolvedUsers] = useState<BooleanById>(initialInvolvedUsers);
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
   const split = useItemizedSplit(receiptData, users, involvedUsers, currentUserId, payerId, initialBreakdown);
 
   const handleFinish = () => {
@@ -54,6 +58,7 @@ export default function ItemizedSplitStep({ receiptData, users, involvedUsers, c
                 onSetAllForMe={split.setAllForMe}
                 onToggleUser={split.toggleUserForItem}
                 onEditItem={split.setEditingItemIdx}
+                onAddMember={() => setShowFriendsPanel(true)}
               />
             </div>
             <div className="w-full lg:w-96 shrink-0 min-h-0 overflow-y-auto">
@@ -83,6 +88,35 @@ export default function ItemizedSplitStep({ receiptData, users, involvedUsers, c
           onClose={() => split.setEditingItemIdx(null)}
           currentUserId={currentUserId}
         />
+      )}
+
+      {showFriendsPanel && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" style={{ animation: 'fadeIn 0.2s ease' }}>
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm"
+            onClick={() => setShowFriendsPanel(false)}
+          />
+          {/* Centered Modal */}
+          <div
+            className="relative bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden w-full max-w-2xl"
+            style={{ maxHeight: '85vh', height: '800px', animation: 'scaleUp 0.3s cubic-bezier(0,0,0.2,1)' }}
+          >
+            <SelectFriendsStep
+              users={users}
+              currentUserId={currentUserId}
+              involvedUsers={involvedUsers}
+              setInvolvedUsers={setInvolvedUsers}
+              listLabel="All Friends"
+              onBack={() => setShowFriendsPanel(false)}
+              onDone={() => setShowFriendsPanel(false)}
+            />
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes scaleUp { from { transform: scale(0.95) translateY(10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+          `}</style>
+        </div>
       )}
     </>
   );
