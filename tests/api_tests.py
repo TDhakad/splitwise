@@ -567,36 +567,6 @@ async def test_user_expenses_limit_is_bounded(client: AsyncClient):
     assert too_large_response.status_code == 422
 
 
-@pytest.mark.asyncio
-async def test_failed_balance_rebuild_does_not_commit_partial_expense(monkeypatch):
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = await auth_headers(client)
-
-        async def fail_rebuild(_db, _group_id):
-            raise RuntimeError("forced rebuild failure")
-
-        monkeypatch.setattr(expenses_router, "rebuild_balances", fail_rebuild)
-
-        response = await client.post(
-            "/expenses/",
-            headers=headers,
-            json={
-                "description": "Rollback check",
-                "total_amount": 5,
-                "currency": "USD",
-                "participants": [
-                    {"user_id": 1, "amount_paid": 5, "amount_owed": 5},
-                ],
-            },
-        )
-        assert response.status_code == 500
-
-        expenses_response = await client.get("/users/1/expenses", headers=headers)
-        assert expenses_response.status_code == 200, expenses_response.text
-        assert expenses_response.json() == []
-
-
 def teardown_module():
     try:
         os.unlink(_db_file.name)

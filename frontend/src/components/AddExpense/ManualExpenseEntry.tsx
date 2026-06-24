@@ -216,7 +216,7 @@ export default function AddExpenseForm({
       </div>
 
       {/* DATE & RECEIPT BLOCK */}
-      <div className="bg-white border border-gray-200 shadow-sm rounded-xl overflow-hidden">
+      <div className="bg-white border border-gray-200 shadow-sm rounded-xl overflow-hidden shrink-0">
         <button type="button" onClick={() => alert('Date selection coming soon!')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-100">
           <div className="flex items-center gap-4">
             <MSIcon name="calendar_today" className="text-gray-500" style={{ fontSize: 20 }} />
@@ -225,14 +225,14 @@ export default function AddExpenseForm({
           <MSIcon name="chevron_right" className="text-gray-400" style={{ fontSize: 18 }} />
         </button>
 
-        <label className={clsx("w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer", isProcessingReceipt && "opacity-50 pointer-events-none")}>
+        <div onClick={() => document.getElementById('receipt-upload')?.click()} className={clsx("w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer", isProcessingReceipt && "opacity-50 pointer-events-none")}>
           <div className="flex items-center gap-4">
             <MSIcon name="receipt_long" className="text-gray-500" style={{ fontSize: 20 }} />
             <span className="text-gray-900 text-sm font-medium">{isProcessingReceipt ? 'Scanning...' : 'Add Receipt'}</span>
           </div>
           <MSIcon name="add_a_photo" className="text-gray-400" style={{ fontSize: 18 }} />
-          <input type="file" accept="image/*" onChange={onFileUpload} className="hidden" disabled={isProcessingReceipt} />
-        </label>
+          <input id="receipt-upload" type="file" accept="image/*,application/pdf" onChange={onFileUpload} className="hidden" disabled={isProcessingReceipt} />
+        </div>
       </div>
 
       {/* SPLIT BLOCK */}
