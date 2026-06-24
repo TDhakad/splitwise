@@ -366,6 +366,46 @@ async def create_settlement(
     return first_settlement
 
 
+@router.put("/settlements/{settlement_id}", response_model=schemas.Settlement)
+async def update_settlement(
+    settlement_id: int,
+    settlement_update: schemas.SettlementUpdate,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    db_settlement = await db.get(models.Settlement, settlement_id)
+    if not db_settlement:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+    if current_user.id not in [db_settlement.payer_id, db_settlement.payee_id]:
+        raise HTTPException(status_code=403, detail="You can only modify your own settlements.")
+    
+    db_settlement.amount = settlement_update.amount
+    await db.commit()
+    await db.refresh(db_settlement)
+    background_tasks.add_task(create_audit_log_background, "Settlement", db_settlement.id, current_user.id, "UPDATE", f"Amount changed to {settlement_update.amount}")
+    return db_settlement
+
+
+@router.delete("/settlements/{settlement_id}", status_code=204)
+async def delete_settlement(
+    settlement_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    db_settlement = await db.get(models.Settlement, settlement_id)
+    if not db_settlement:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+    if current_user.id not in [db_settlement.payer_id, db_settlement.payee_id]:
+        raise HTTPException(status_code=403, detail="You can only delete your own settlements.")
+    
+    await db.delete(db_settlement)
+    await db.commit()
+    background_tasks.add_task(create_audit_log_background, "Settlement", settlement_id, current_user.id, "DELETE")
+    return None
+
+
 @router.get("/users/{user_id}/expenses", response_model=list[schemas.ExpenseWithCreator])
 async def get_all_user_expenses(
     user_id: int,

@@ -109,3 +109,15 @@ export function useAddGroupMember(groupId: number | null | undefined) {
     },
   });
 }
+
+export function useRemoveGroupMember(groupId: number) {
+  const queryClient = useQueryClient();
+  
+  return useMutation<StatusResponse, ApiError, number>({
+    mutationFn: (userId) => apiJson<StatusResponse>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: groupsKeys.detail(groupId) });
+      queryClient.invalidateQueries({ queryKey: groupsKeys.list() });
+    },
+  });
+}

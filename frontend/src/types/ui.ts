@@ -108,6 +108,7 @@ export interface SettlementActivity {
   icon: string;
   timeAgo: string;
   badgeColor: string;
+  settlementObj: import('./api').Settlement;
 }
 
 export interface GroupInviteActivity {

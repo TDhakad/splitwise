@@ -11,6 +11,8 @@ interface ExpenseActivityRowProps {
 
 interface ActivityRowProps<TActivity extends ActivityItem> {
    activity: TActivity;
+   onClick?: () => void;
+   onDelete?: (e: React.MouseEvent) => void;
 }
 
 export function ExpenseActivityRow({ activity, currentUserId, onClick }: ExpenseActivityRowProps) {
@@ -64,9 +66,9 @@ export function ExpenseActivityRow({ activity, currentUserId, onClick }: Expense
    );
 }
 
-export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementActivity>) {
+export function SettlementActivityRow({ activity, onClick, onDelete }: ActivityRowProps<SettlementActivity>) {
    return (
-      <div className="p-4 sm:p-5 mb-3 sm:mb-0 bg-white sm:bg-transparent border border-gray-200 sm:border-0 rounded-2xl sm:rounded-none shadow-sm sm:shadow-none flex items-start gap-4 hover:bg-gray-50 transition-colors">
+      <div onClick={onClick} className={clsx("p-4 sm:p-5 mb-3 sm:mb-0 bg-white sm:bg-transparent border border-gray-200 sm:border-0 rounded-2xl sm:rounded-none shadow-sm sm:shadow-none flex items-start gap-4 hover:bg-gray-50 transition-colors", onClick && "cursor-pointer group relative")}>
          <div className="relative pt-1 shrink-0">
             <div className={clsx("w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold shadow-sm border-2 border-white", avatarColor(activity.user_id))}>
                {initials(activity.userName)}
@@ -85,13 +87,32 @@ export function SettlementActivityRow({ activity }: ActivityRowProps<SettlementA
             </p>
          </div>
 
-         <div className="text-right shrink-0 pt-1 ml-2 sm:ml-4 flex flex-col items-end">
-            <p className="text-xl font-bold text-[#007A64]">${activity.amount.toFixed(2)}</p>
-            <div className="flex items-center gap-1.5 text-gray-700 justify-end mt-1">
-               <MSIcon name="check_circle" className="text-sm text-[#007A64]" />
-               <span className="text-xs font-bold tracking-widest uppercase text-[#007A64]">Settled</span>
+         <div className="text-right shrink-0 pt-1 ml-2 sm:ml-4 flex items-center gap-4">
+            <div className="flex flex-col items-end">
+               <p className="text-xl font-bold text-[#007A64]">${activity.amount.toFixed(2)}</p>
+               <div className="flex items-center gap-1.5 text-gray-700 justify-end mt-1">
+                  <MSIcon name="check_circle" className="text-sm text-[#007A64]" />
+                  <span className="text-xs font-bold tracking-widest uppercase text-[#007A64]">Settled</span>
+               </div>
             </div>
+            {onDelete && (
+               <button 
+                  onClick={onDelete} 
+                  className="p-2 text-gray-400 hover:text-[#D93F3C] hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 hidden sm:block"
+                  title="Delete Settlement"
+               >
+                  <MSIcon name="delete" className="text-[20px]" />
+               </button>
+            )}
          </div>
+         {onDelete && (
+            <button 
+               onClick={onDelete} 
+               className="absolute top-4 right-4 p-2 text-gray-400 hover:text-[#D93F3C] bg-white rounded-full shadow-sm sm:hidden"
+            >
+               <MSIcon name="delete" className="text-[18px]" />
+            </button>
+         )}
       </div>
    );
 }

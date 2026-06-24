@@ -4,6 +4,9 @@ import { ExpenseActivityRow, SettlementActivityRow, GroupInviteActivityRow } fro
 import type { ExpenseWithCreator, GroupDetail, Settlement, User } from '../types/api';
 import type { ActivityItem, ExpenseActivity, SettlementActivity } from '../types/ui';
 
+import { SettlementDetailModal } from './SettlementDetailModal';
+import { useDeleteSettlement } from '../features/settlements/api';
+
 type ActivityFilter = 'All' | 'Expenses' | 'Settlements' | 'Groups';
 
 interface ActivityViewProps {
@@ -18,6 +21,7 @@ interface ActivityViewProps {
 export default function ActivityView({ expenses, settlements, groups, users, currentUserId, onSelectExpense }: ActivityViewProps) {
   const [filter, setFilter] = useState<ActivityFilter>('All');
   const [visibleCount, setVisibleCount] = useState(25);
+  const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
 
   const handleFilterChange = (nextFilter: ActivityFilter) => {
     setFilter(nextFilter);
@@ -68,7 +72,8 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
         amount: s.amount,
         icon: 'payments',
         timeAgo: dateObj.toLocaleDateString(),
-        badgeColor: 'bg-[#007A64]'
+        badgeColor: 'bg-[#007A64]',
+        settlementObj: s
      };
   });
 
@@ -109,11 +114,29 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
      return a.date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   })));
 
+  const deleteSettlement = useDeleteSettlement();
+
   const renderRow = (activity: ActivityItem) => {
      if (activity.type === 'expense') {
         return <ExpenseActivityRow key={activity.id} activity={activity} currentUserId={currentUserId} onClick={() => onSelectExpense(activity.expenseObj)} />;
      }
-     if (activity.type === 'settlement') return <SettlementActivityRow key={activity.id} activity={activity} />;
+     if (activity.type === 'settlement') return (
+        <SettlementActivityRow 
+           key={activity.id} 
+           activity={activity} 
+           onClick={() => setSelectedSettlement(activity.settlementObj)}
+           onDelete={(e) => {
+              e.stopPropagation();
+              if (confirm('Are you sure you want to delete this settlement?')) {
+                 deleteSettlement.mutateAsync({
+                    settlementId: activity.settlementObj.id,
+                    groupId: activity.settlementObj.group_id,
+                    currentUserId,
+                 }).catch(err => console.error('Failed to delete settlement:', err));
+              }
+           }}
+        />
+     );
      if (activity.type === 'group_invite') return <GroupInviteActivityRow key={activity.id} activity={activity} />;
      return null;
   };
@@ -159,6 +182,14 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
             </button>
          </div>
       )}
+
+      <SettlementDetailModal
+         isOpen={!!selectedSettlement}
+         onClose={() => setSelectedSettlement(null)}
+         settlement={selectedSettlement}
+         users={users}
+         currentUserId={currentUserId}
+      />
     </div>
   );
 }

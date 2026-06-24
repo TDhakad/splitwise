@@ -148,6 +148,37 @@ async def add_group_member(
     return {"status": "success"}
 
 
+@router.delete("/{group_id}/members/{user_id}")
+async def remove_group_member(
+    group_id: int,
+    user_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # User can leave themselves, OR group manager can remove them
+    if current_user.id != user_id:
+        group = await require_group_manager(db, group_id, current_user.id)
+    else:
+        # User is leaving themselves, ensure they are in the group
+        group = await db.get(models.Group, group_id)
+        if not group:
+            raise HTTPException(status_code=404, detail="Group not found")
+
+    result = await db.execute(
+        select(models.GroupMember)
+        .where(models.GroupMember.group_id == group_id, models.GroupMember.user_id == user_id)
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(status_code=404, detail="User is not a member of this group")
+
+    # The user asked to allow leaving even with balances, just show warning.
+    # We remove the GroupMember record.
+    await db.delete(member)
+    await db.commit()
+    return {"status": "success"}
+
+
 @router.put("/{group_id}/simplify")
 async def toggle_simplify_debts(
     group_id: int,

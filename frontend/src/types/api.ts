@@ -159,6 +159,10 @@ export interface SettlementCreate {
   currency?: Currency;
 }
 
+export interface SettlementUpdate {
+  amount: number;
+}
+
 export interface Settlement extends Required<SettlementCreate> {
   group_id: number | null;
   id: number;

@@ -13,9 +13,12 @@ import {
   useGroupExpenses,
   useGroupSettlements,
   useUpdateGroupSimplify,
+  useRemoveGroupMember,
 } from '../features/groups/api';
 import type { ExpenseWithCreator, GroupDetail, Settlement, User } from '../types/api';
 import type { SettleUpContext } from '../types/ui';
+import { SettlementDetailModal } from './SettlementDetailModal';
+import { useDeleteSettlement } from '../features/settlements/api';
 
 type GroupTransaction =
   | { type: 'expense'; date: string; data: ExpenseWithCreator }
@@ -35,6 +38,8 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberQuery, setMemberQuery] = useState('');
   const [memberError, setMemberError] = useState('');
+  const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<User | null>(null);
   const debouncedMemberQuery = useDebouncedValue(memberQuery);
 
   const groupQuery = useGroup(groupId);
@@ -43,6 +48,8 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
   const balancesQuery = useGroupBalances(groupId);
   const updateSimplify = useUpdateGroupSimplify(groupId, currentUserId);
   const addMember = useAddGroupMember(groupId);
+  const deleteSettlement = useDeleteSettlement();
+  const removeMember = useRemoveGroupMember(groupId);
 
   if (groupQuery.isPending || expensesQuery.isPending || settlementsQuery.isPending || balancesQuery.isPending) {
     return <LoadingState label="Loading group..." />;
@@ -149,7 +156,23 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
                   {transactions.map(t => (
                      t.type === 'expense'
                         ? <ExpenseRow key={`expense-${t.data.id}`} expense={t.data} currentUserId={currentUserId} onClick={() => onSelectExpense(t.data, groupDetail)} />
-                        : <SettlementRow key={`settlement-${t.data.id}`} settlement={t.data} users={users} currentUserId={currentUserId} />
+                        : <SettlementRow 
+                             key={`settlement-${t.data.id}`} 
+                             settlement={t.data} 
+                             users={users} 
+                             currentUserId={currentUserId} 
+                             onClick={() => setSelectedSettlement(t.data)} 
+                             onDelete={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Are you sure you want to delete this settlement?')) {
+                                   deleteSettlement.mutateAsync({
+                                      settlementId: t.data.id,
+                                      groupId: t.data.group_id,
+                                      currentUserId,
+                                   }).catch(err => console.error('Failed to delete settlement:', err));
+                                }
+                             }}
+                          />
                   ))}
                </div>}
          </div>
@@ -195,17 +218,42 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
                   </div>
                )}
                <div className="space-y-4">
-                  {groupDetail.members.map(m => (
-                     <div key={m.id} className="flex items-center gap-3">
-                        <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm border-2 border-white', avatarColor(m.id))}>
-                           {initials(m.name)}
+                  {groupDetail.members.map(m => {
+                     const isMe = m.id === currentUserId;
+                     const isCreator = groupDetail.created_by === currentUserId;
+                     const canRemove = isMe || isCreator;
+                     
+                     return (
+                        <div key={m.id} className="flex items-center justify-between group/member">
+                           <div className="flex items-center gap-3">
+                              <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm border-2 border-white', avatarColor(m.id))}>
+                                 {initials(m.name)}
+                              </div>
+                              <div>
+                                 <span className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                    {isMe ? 'You' : m.name}
+                                    {m.id === groupDetail.created_by && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Creator</span>}
+                                 </span>
+                                 <p className="text-xs text-gray-500">{m.email}</p>
+                              </div>
+                           </div>
+                           {canRemove && groupDetail.members.length > 1 && (
+                              <button
+                                 onClick={() => setMemberToRemove(m)}
+                                 disabled={removeMember.isPending && removeMember.variables === m.id}
+                                 className="p-2 text-gray-400 hover:text-[#D93F3C] hover:bg-red-50 rounded-full transition-colors sm:opacity-0 sm:group-hover/member:opacity-100 disabled:opacity-50"
+                                 title={isMe ? "Leave Group" : "Remove Member"}
+                              >
+                                 {removeMember.isPending && removeMember.variables === m.id ? (
+                                    <MSIcon name="refresh" className="text-lg animate-spin text-[#D93F3C]" />
+                                 ) : (
+                                    <MSIcon name={isMe ? "logout" : "person_remove"} className="text-lg" />
+                                 )}
+                              </button>
+                           )}
                         </div>
-                        <div>
-                           <span className="text-sm font-bold text-gray-900">{m.id === currentUserId ? 'You' : m.name}</span>
-                           <p className="text-xs text-gray-500">{m.email}</p>
-                        </div>
-                     </div>
-                  ))}
+                     );
+                  })}
                </div>
             </div>
 
@@ -258,6 +306,46 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
             </div>
          </div>
       </div>
+      <SettlementDetailModal
+         isOpen={!!selectedSettlement}
+         onClose={() => setSelectedSettlement(null)}
+         settlement={selectedSettlement}
+         users={users}
+         currentUserId={currentUserId}
+      />
+
+      {memberToRemove && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl p-6 shadow-xl w-full max-w-sm">
+               <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4 mx-auto">
+                  <MSIcon name="warning" className="text-2xl text-[#D93F3C]" />
+               </div>
+               <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+                  {memberToRemove.id === currentUserId ? 'Leave Group?' : 'Remove Member?'}
+               </h3>
+               <p className="text-sm text-gray-500 text-center mb-6">
+                  {memberToRemove.id === currentUserId 
+                     ? 'Are you sure you want to leave this group? Any unsettled balances will remain in your Activity feed.' 
+                     : `Are you sure you want to remove ${memberToRemove.name}?`
+                  }
+               </p>
+               <div className="flex gap-3">
+                  <button onClick={() => setMemberToRemove(null)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors">
+                     Cancel
+                  </button>
+                  <button 
+                     onClick={() => {
+                        removeMember.mutateAsync(memberToRemove.id).then(() => setMemberToRemove(null)).catch(err => console.error('Failed to remove member:', err));
+                     }} 
+                     disabled={removeMember.isPending}
+                     className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-[#D93F3C] hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                     {removeMember.isPending ? <MSIcon name="refresh" className="animate-spin" /> : 'Confirm'}
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
     </div>
   );
 }
@@ -266,9 +354,11 @@ interface SettlementRowProps {
   settlement: Settlement;
   users: User[];
   currentUserId: number;
+  onClick?: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
 }
 
-function SettlementRow({ settlement, users, currentUserId }: SettlementRowProps) {
+function SettlementRow({ settlement, users, currentUserId, onClick, onDelete }: SettlementRowProps) {
   const payer = users.find(u => u.id === settlement.payer_id) || { name: 'Someone' };
   const payee = users.find(u => u.id === settlement.payee_id) || { name: 'someone' };
   const date = new Date(settlement.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -276,7 +366,7 @@ function SettlementRow({ settlement, users, currentUserId }: SettlementRowProps)
   const payeeName = settlement.payee_id === currentUserId ? 'you' : payee.name;
 
   return (
-    <div className="flex items-center justify-between p-4 border border-transparent rounded-xl">
+    <div onClick={onClick} className={clsx("flex items-center justify-between p-4 border border-transparent rounded-xl group relative", onClick && "cursor-pointer hover:bg-gray-50 transition-colors")}>
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-xl bg-[#EAF5F2] flex items-center justify-center transition-colors shadow-sm">
           <MSIcon name="payments" className="text-[#007A64] text-xl" />
@@ -286,10 +376,29 @@ function SettlementRow({ settlement, users, currentUserId }: SettlementRowProps)
           <p className="text-[12px] font-medium text-gray-500 mt-0.5">{date}</p>
         </div>
       </div>
-      <div className="text-right shrink-0 ml-4">
-        <p className="text-[10px] font-bold tracking-widest uppercase text-[#007A64]">settled</p>
-        <p className="font-bold text-[#007A64]">${settlement.amount.toFixed(2)}</p>
+      <div className="text-right shrink-0 ml-4 flex items-center gap-4">
+        <div>
+          <p className="text-[10px] font-bold tracking-widest uppercase text-[#007A64]">settled</p>
+          <p className="font-bold text-[#007A64]">${settlement.amount.toFixed(2)}</p>
+        </div>
+        {onDelete && (
+           <button 
+              onClick={onDelete} 
+              className="p-2 text-gray-400 hover:text-[#D93F3C] hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 hidden sm:block"
+              title="Delete Settlement"
+           >
+              <MSIcon name="delete" className="text-[20px]" />
+           </button>
+        )}
       </div>
+      {onDelete && (
+         <button 
+            onClick={onDelete} 
+            className="absolute top-4 right-4 p-2 text-gray-400 hover:text-[#D93F3C] bg-white rounded-full shadow-sm sm:hidden"
+         >
+            <MSIcon name="delete" className="text-[18px]" />
+         </button>
+      )}
     </div>
   );
 }

@@ -155,6 +155,9 @@ class SettlementCreate(BaseModel):
     amount: float = Field(gt=0)
     currency: Literal["USD"] = "USD"
     
+class SettlementUpdate(BaseModel):
+    amount: float = Field(gt=0)
+    
 class Settlement(SettlementCreate):
     id: int
     date: datetime

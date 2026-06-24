@@ -42,3 +42,55 @@ export function useCreateSettlement() {
     },
   });
 }
+
+interface UpdateSettlementVariables {
+  settlementId: number;
+  payload: { amount: number };
+  groupId?: number | null;
+  currentUserId: number;
+}
+
+export function useUpdateSettlement() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Settlement, ApiError, UpdateSettlementVariables>({
+    mutationFn: ({ settlementId, payload }) => apiJson<Settlement>(`/settlements/${settlementId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+    onSuccess: (_, { currentUserId, groupId }) => {
+      queryClient.invalidateQueries({ queryKey: settlementsKeys.user(currentUserId) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.raw(currentUserId) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.summary(currentUserId) });
+      if (groupId) {
+        queryClient.invalidateQueries({ queryKey: groupsKeys.settlements(groupId) });
+        queryClient.invalidateQueries({ queryKey: groupsKeys.balances(groupId) });
+      }
+    },
+  });
+}
+
+interface DeleteSettlementVariables {
+  settlementId: number;
+  groupId?: number | null;
+  currentUserId: number;
+}
+
+export function useDeleteSettlement() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, ApiError, DeleteSettlementVariables>({
+    mutationFn: ({ settlementId }) => apiJson<void>(`/settlements/${settlementId}`, {
+      method: 'DELETE',
+    }),
+    onSuccess: (_, { currentUserId, groupId }) => {
+      queryClient.invalidateQueries({ queryKey: settlementsKeys.user(currentUserId) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.raw(currentUserId) });
+      queryClient.invalidateQueries({ queryKey: balancesKeys.summary(currentUserId) });
+      if (groupId) {
+        queryClient.invalidateQueries({ queryKey: groupsKeys.settlements(groupId) });
+        queryClient.invalidateQueries({ queryKey: groupsKeys.balances(groupId) });
+      }
+    },
+  });
+}
