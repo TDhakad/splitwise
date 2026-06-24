@@ -136,6 +136,9 @@ class Expense(BaseModel):
     category: Optional[str] = None
     has_receipt: Optional[bool] = False
     receipt_breakdown: Optional[ReceiptBreakdown] = None
+    is_deleted: Optional[bool] = False
+    deleted_by: Optional[int] = None
+    deleted_at: Optional[datetime] = None
     participants: List[ExpenseParticipant]
     
     class Config:

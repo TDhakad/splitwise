@@ -65,7 +65,7 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
     return <ErrorState title="Unable to load group" message="Group details were not returned." />;
   }
 
-  const groupExpenses = expensesQuery.data ?? [];
+  const groupExpenses = (expensesQuery.data ?? []).filter(e => !e.is_deleted);
   const groupSettlements = settlementsQuery.data ?? [];
   const groupBalances = balancesQuery.data ?? [];
 

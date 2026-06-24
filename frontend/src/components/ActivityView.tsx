@@ -28,15 +28,16 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
     setVisibleCount(25);
   };
   
-  const expenseActivities: ExpenseActivity[] = expenses.map(e => {
+  const expenseActivities: ExpenseActivity[] = expenses.flatMap(e => {
      const me = e.participants?.find(p => p.user_id === currentUserId);
      const net = (me?.amount_paid ?? 0) - (me?.amount_owed ?? 0);
      const creator = users.find(u => u.id === e.created_by) || { name: 'Someone', id: e.created_by };
      const group = groups.find(g => g.id === e.group_id);
      
      const dateObj = new Date(e.date);
+     const activities: ExpenseActivity[] = [];
      
-     return {
+     activities.push({
         id: `exp-${e.id}`,
         expenseObj: e,
         type: 'expense' as const,
@@ -50,7 +51,29 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
         icon: 'receipt_long',
         timeAgo: dateObj.toLocaleDateString(),
         badgeColor: 'bg-[#007A64]'
-     };
+     });
+
+     if (e.is_deleted && e.deleted_at && e.deleted_by) {
+        const deleter = users.find(u => u.id === e.deleted_by) || { name: 'Someone', id: e.deleted_by };
+        const deletedDateObj = new Date(e.deleted_at);
+        activities.push({
+           id: `exp-del-${e.id}`,
+           expenseObj: e,
+           type: 'expense' as const,
+           date: deletedDateObj,
+           user_id: deleter.id,
+           userName: deleter.id === currentUserId ? 'You' : deleter.name,
+           action: 'deleted',
+           item: e.description,
+           groupName: group?.name,
+           net: 0,
+           icon: 'delete',
+           timeAgo: deletedDateObj.toLocaleDateString(),
+           badgeColor: 'bg-red-500'
+        });
+     }
+     
+     return activities;
   });
 
   const settlementActivities: SettlementActivity[] = settlements.map(s => {

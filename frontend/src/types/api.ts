@@ -143,6 +143,9 @@ export interface Expense extends Omit<ExpenseCreate, 'currency' | 'date' | 'cate
   category?: string | null;
   has_receipt?: boolean;
   receipt_breakdown?: ReceiptBreakdown | null;
+  is_deleted?: boolean;
+  deleted_by?: number | null;
+  deleted_at?: string | null;
   participants: ExpenseParticipant[];
 }
 

@@ -31,6 +31,8 @@ RUN uv pip install --system -r ./pyproject.toml
 
 # Copy only the folders required for the backend
 COPY backend/ ./backend/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
 
 # Copy the compiled static frontend assets from Stage 1 into a specific directory
 COPY --from=frontend-builder /build/dist ./frontend/dist
@@ -38,5 +40,5 @@ COPY --from=frontend-builder /build/dist ./frontend/dist
 # Expose the port Cloud Run expects (defaults to 8080)
 EXPOSE 8080
 
-# Run FastAPI using Uvicorn
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run alembic migrations then start FastAPI using Uvicorn
+CMD ["sh", "-c", "uv run alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8080"]

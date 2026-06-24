@@ -7,7 +7,7 @@ interface ReceiptBreakdownCardProps {
   breakdown: ReceiptBreakdown;
   users: User[];
   currentUserId: number;
-  onEdit: () => void;
+  onEdit?: () => void;
 }
 
 const formatMoney = (value: number) => `$${value.toFixed(2)}`;
@@ -27,13 +27,15 @@ export default function ReceiptBreakdownCard({ breakdown, users, currentUserId, 
           <h3 className="text-xs font-bold tracking-widest uppercase text-gray-500">Receipt Breakdown</h3>
           <p className="text-sm text-gray-500 mt-1">Tax, tip, and discount split proportionally by item subtotal.</p>
         </div>
-        <button
-          onClick={onEdit}
-          className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-[#007A64] rounded-lg text-sm font-bold hover:bg-[#EAF5F2] transition-colors"
-        >
-          <MSIcon name="edit" className="text-base" />
-          Edit Split
-        </button>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-[#007A64] rounded-lg text-sm font-bold hover:bg-[#EAF5F2] transition-colors"
+          >
+            <MSIcon name="edit" className="text-base" />
+            Edit Split
+          </button>
+        )}
       </div>
 
       <div className="divide-y divide-gray-100">

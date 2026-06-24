@@ -34,7 +34,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     groups = relationship("GroupMember", back_populates="user")
-    expenses_created = relationship("Expense", back_populates="creator")
+    expenses_created = relationship("Expense", foreign_keys="[Expense.created_by]", back_populates="creator")
 
 class Group(Base):
     __tablename__ = "groups"
@@ -70,10 +70,13 @@ class Expense(Base):
     category = Column(String, nullable=True, default="Entertainment / Drinks")
     has_receipt = Column(Boolean, default=False)
     receipt_breakdown = Column(JSON, nullable=True)
+    is_deleted = Column(Boolean, default=False)
+    deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     group = relationship("Group", back_populates="expenses")
-    creator = relationship("User", back_populates="expenses_created")
+    creator = relationship("User", foreign_keys=[created_by], back_populates="expenses_created")
     participants = relationship("ExpenseParticipant", back_populates="expense", cascade="all, delete-orphan")
     plan = relationship("Plan", back_populates="expenses")
 

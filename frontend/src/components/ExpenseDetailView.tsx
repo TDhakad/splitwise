@@ -82,12 +82,16 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
             </button>
             <h1 className="font-bold text-xl text-gray-900 truncate px-3">{expense.description}</h1>
             <div className="flex items-center gap-1">
-               <button onClick={() => onEdit(expense)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Edit expense">
-                  <MSIcon name="edit" />
-               </button>
-               <button onClick={() => setShowDeleteConfirm(true)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Delete expense">
-                  <MSIcon name="delete" />
-               </button>
+               {!expense.is_deleted && (
+                  <>
+                     <button onClick={() => onEdit(expense)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Edit expense">
+                        <MSIcon name="edit" />
+                     </button>
+                     <button onClick={() => setShowDeleteConfirm(true)} className="w-11 h-11 rounded-full flex items-center justify-center text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Delete expense">
+                        <MSIcon name="delete" />
+                     </button>
+                  </>
+               )}
             </div>
          </div>
 
@@ -112,18 +116,28 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
          <div className="hidden sm:flex items-end justify-between mb-8">
             <h1 className="text-[40px] font-bold text-gray-900 leading-none tracking-tight">{expense.description}</h1>
             <div className="flex gap-3">
-               <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm">
-                  <MSIcon name="delete" className="text-lg" /> Delete
-               </button>
-               <button onClick={() => onEdit(expense)} className="flex items-center gap-2 px-5 py-2.5 bg-[#007A64] text-white rounded-lg text-sm font-bold hover:bg-[#00604f] transition-colors shadow-sm">
-                  <MSIcon name="edit" className="text-lg" /> Edit Expense
-               </button>
+               {!expense.is_deleted && (
+                  <>
+                     <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm">
+                        <MSIcon name="delete" className="text-lg" /> Delete
+                     </button>
+                     <button onClick={() => onEdit(expense)} className="flex items-center gap-2 px-5 py-2.5 bg-[#007A64] text-white rounded-lg text-sm font-bold hover:bg-[#00604f] transition-colors shadow-sm">
+                        <MSIcon name="edit" className="text-lg" /> Edit Expense
+                     </button>
+                  </>
+               )}
             </div>
          </div>
 
          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
             {/* Left Column */}
             <div className="flex-1 space-y-6">
+               {expense.is_deleted && (
+                  <div className="bg-red-50 text-red-800 px-4 py-3 rounded-xl font-medium border border-red-200 flex items-center gap-2">
+                     <MSIcon name="info" className="text-red-500" />
+                     This expense was deleted.
+                  </div>
+               )}
                {/* High-level details box */}
                <div className="bg-white rounded-3xl sm:rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row overflow-hidden">
                   <div className="flex-1 p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-gray-100 flex flex-col justify-between space-y-8">
@@ -203,7 +217,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                      breakdown={expense.receipt_breakdown}
                      users={users}
                      currentUserId={currentUserId}
-                     onEdit={() => setShowReceiptSplitEditor(true)}
+                     onEdit={expense.is_deleted ? undefined : () => setShowReceiptSplitEditor(true)}
                   />
                )}
             </div>
@@ -246,14 +260,17 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                         {auditLogs.map((log, idx) => {
                            const u = users.find(usr => usr.id === log.user_id) || { name: 'Someone' };
                            const isYou = log.user_id === currentUserId;
-                           const actionStr = log.action === 'CREATE' ? 'created this expense' : 'updated this expense';
+                           let actionStr = 'updated this expense';
+                           if (log.action === 'CREATE') actionStr = 'created this expense';
+                           else if (log.action === 'DELETE') actionStr = 'deleted this expense';
                            
-                           let parsedChanges: unknown[] = [];
+                           type AuditChange = { type: 'field'; field: string; old: any; new: any } | { type: 'split'; user_id: number; field: 'amount_owed' | 'amount_paid'; old: number; new: number };
+                           let parsedChanges: AuditChange[] = [];
                            try {
                               if (log.changes) {
                                  const parsed = JSON.parse(log.changes);
                                  if (Array.isArray(parsed)) {
-                                    parsedChanges = parsed;
+                                    parsedChanges = parsed as AuditChange[];
                                  }
                               }
                            } catch (_e) {

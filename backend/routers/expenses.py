@@ -122,10 +122,14 @@ async def delete_expense(
     db_expense = await get_expense_with_details(db, expense_id)
     if not db_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
+    if db_expense.is_deleted:
+        raise HTTPException(status_code=400, detail="Expense is already deleted")
 
     await require_expense_access(db, db_expense, current_user.id)
     group_id = db_expense.group_id
-    await db.delete(db_expense)
+    db_expense.is_deleted = True
+    db_expense.deleted_by = current_user.id
+    db_expense.deleted_at = datetime.datetime.now(datetime.timezone.utc)
     await db.commit()
     background_tasks.add_task(create_audit_log_background, "Expense", expense_id, current_user.id, "DELETE")
 
@@ -141,6 +145,9 @@ async def update_expense(
     db_expense = await get_expense_with_details(db, expense_id)
     if not db_expense:
         raise HTTPException(status_code=404, detail="Expense not found")
+
+    if db_expense.is_deleted:
+        raise HTTPException(status_code=400, detail="Cannot update a deleted expense")
 
     if db_expense.group_id:
         await require_group_expense_participants(
@@ -170,6 +177,9 @@ async def update_expense(
     new_category = expense_category_value(expense_in.category)
     if db_expense.category != new_category:
         changes.append({"type": "field", "field": "category", "old": db_expense.category, "new": new_category})
+
+    if "has_receipt" in expense_in.model_fields_set and db_expense.has_receipt != expense_in.has_receipt:
+        changes.append({"type": "field", "field": "has_receipt", "old": db_expense.has_receipt, "new": expense_in.has_receipt})
 
     new_date = as_naive_utc(expense_in.date) or db_expense.date
     if db_expense.date != new_date:
@@ -201,6 +211,8 @@ async def update_expense(
     db_expense.currency = expense_in.currency
     db_expense.category = new_category
     db_expense.date = new_date
+    if "has_receipt" in expense_in.model_fields_set:
+        db_expense.has_receipt = expense_in.has_receipt
     if "receipt_breakdown" in expense_in.model_fields_set:
         db_expense.receipt_breakdown = (
             jsonable_encoder(expense_in.receipt_breakdown)

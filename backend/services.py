@@ -35,7 +35,7 @@ async def compute_balances_for_group(db: AsyncSession, group_id: int | None) -> 
                 func.sum(models.ExpenseParticipant.amount_paid - models.ExpenseParticipant.amount_owed),
             )
             .join(models.Expense)
-            .where(models.Expense.group_id == group_id)
+            .where(models.Expense.group_id == group_id, models.Expense.is_deleted == False)
             .group_by(models.ExpenseParticipant.user_id)
         )
 
@@ -89,7 +89,7 @@ async def compute_balances_for_group(db: AsyncSession, group_id: int | None) -> 
                 models.ExpenseParticipant.amount_owed,
             )
             .join(models.Expense)
-            .where(models.Expense.group_id == group_id)
+            .where(models.Expense.group_id == group_id, models.Expense.is_deleted == False)
             .order_by(models.ExpenseParticipant.expense_id)
         )
 
@@ -136,7 +136,7 @@ async def compute_balances_for_user(db: AsyncSession, user_id: int) -> list[dict
     group_ids_result = await db.execute(
         select(models.Expense.group_id)
         .join(models.ExpenseParticipant)
-        .where(models.ExpenseParticipant.user_id == user_id)
+        .where(models.ExpenseParticipant.user_id == user_id, models.Expense.is_deleted == False)
         .distinct()
     )
     group_ids = {row[0] for row in group_ids_result.all()}
