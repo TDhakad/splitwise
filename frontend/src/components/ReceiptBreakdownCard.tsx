@@ -1,18 +1,52 @@
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import { avatarColor, initials } from '../lib/utils';
+import { exportReceiptBreakdown, copyReceiptBreakdown, type ReceiptExportFormat } from '../lib/receiptExport';
 import type { ReceiptBreakdown, User } from '../types/api';
 
 interface ReceiptBreakdownCardProps {
   breakdown: ReceiptBreakdown;
   users: User[];
   currentUserId: number;
+  title?: string;
   onEdit?: () => void;
 }
 
 const formatMoney = (value: number) => `$${value.toFixed(2)}`;
 
-export default function ReceiptBreakdownCard({ breakdown, users, currentUserId, onEdit }: ReceiptBreakdownCardProps) {
+export default function ReceiptBreakdownCard({ breakdown, users, currentUserId, title, onEdit }: ReceiptBreakdownCardProps) {
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [copied, setCopied] = useState<ReceiptExportFormat | null>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [exportMenuOpen]);
+
+  const handleExport = (format: ReceiptExportFormat) => {
+    exportReceiptBreakdown(breakdown, users, format, title);
+    setExportMenuOpen(false);
+  };
+
+  const handleCopy = async (format: ReceiptExportFormat) => {
+    try {
+      await copyReceiptBreakdown(breakdown, users, format);
+      setCopied(format);
+      window.setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setCopied(null);
+    }
+    setExportMenuOpen(false);
+  };
+
   const findUser = (userId: number) => users.find(user => user.id === userId);
   const labelForUser = (userId: number) => {
     const user = findUser(userId);
@@ -27,15 +61,64 @@ export default function ReceiptBreakdownCard({ breakdown, users, currentUserId, 
           <h3 className="text-xs font-bold tracking-widest uppercase text-gray-500">Receipt Breakdown</h3>
           <p className="text-sm text-gray-500 mt-1">Tax, tip, and discount split proportionally by item subtotal.</p>
         </div>
-        {onEdit && (
-          <button
-            onClick={onEdit}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-[#007A64] rounded-lg text-sm font-bold hover:bg-[#EAF5F2] transition-colors"
-          >
-            <MSIcon name="edit" className="text-base" />
-            Edit Split
-          </button>
-        )}
+        <div className="shrink-0 flex items-center gap-2">
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportMenuOpen(open => !open)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-[#007A64] rounded-lg text-sm font-bold hover:bg-[#EAF5F2] transition-colors"
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+            >
+              <MSIcon name={copied ? 'check' : 'download'} className="text-base" />
+              {copied ? `Copied ${copied.toUpperCase()}` : 'Export'}
+            </button>
+            {exportMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => handleExport('csv')}
+                  className="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#EAF5F2] hover:text-[#007A64] transition-colors"
+                >
+                  Export as CSV
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => handleExport('tsv')}
+                  className="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#EAF5F2] hover:text-[#007A64] transition-colors"
+                >
+                  Export as TSV
+                </button>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  role="menuitem"
+                  onClick={() => handleCopy('csv')}
+                  className="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#EAF5F2] hover:text-[#007A64] transition-colors"
+                >
+                  Copy as CSV
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => handleCopy('tsv')}
+                  className="w-full text-left px-4 py-2 text-sm font-medium text-gray-700 hover:bg-[#EAF5F2] hover:text-[#007A64] transition-colors"
+                >
+                  Copy as TSV
+                </button>
+              </div>
+            )}
+          </div>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-[#007A64] rounded-lg text-sm font-bold hover:bg-[#EAF5F2] transition-colors"
+            >
+              <MSIcon name="edit" className="text-base" />
+              Edit Split
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="divide-y divide-gray-100">
