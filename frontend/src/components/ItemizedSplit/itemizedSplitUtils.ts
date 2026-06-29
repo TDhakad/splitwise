@@ -175,18 +175,9 @@ export function inferShareWeights(amounts: NumberById): NumberById {
   const entries = Object.entries(amounts).filter(([, amount]) => amount > 0.005);
   if (entries.length === 0) return {};
 
-  const cents = entries.map(([, amount]) => Math.round(amount * 100));
-  const divisor = cents.reduce((current, next) => gcd(current, next));
-  return Object.fromEntries(entries.map(([userId], idx) => [Number(userId), cents[idx] / divisor])) as NumberById;
-}
-
-function gcd(a: number, b: number): number {
-  let x = Math.abs(a);
-  let y = Math.abs(b);
-  while (y) {
-    const next = x % y;
-    x = y;
-    y = next;
-  }
-  return x || 1;
+  const minAmount = Math.min(...entries.map(([, amount]) => amount));
+  return Object.fromEntries(entries.map(([userId, amount]) => {
+    const share = Math.round((amount / minAmount) * 100) / 100;
+    return [Number(userId), share];
+  })) as NumberById;
 }
