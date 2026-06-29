@@ -105,7 +105,7 @@ export default function ItemizedSplitStep({ receiptData, setReceiptData, users, 
           activeUsers={split.activeUsers}
           currentAssignments={split.itemAssignments[split.editingItemIdx]}
           currentCustom={split.customSplits[split.editingItemIdx]}
-          onSave={(newSplit) => split.saveCustomSplit(split.editingItemIdx!, newSplit)}
+          onSave={newSplit => split.saveCustomSplit(split.editingItemIdx!, newSplit)}
           onClose={() => split.setEditingItemIdx(null)}
           currentUserId={currentUserId}
         />

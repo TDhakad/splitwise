@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from '../MSIcon';
 import { avatarColor, initials } from '../../lib/utils';
-import { toNumber } from './itemizedSplitUtils';
+import { inferShareWeights, toNumber } from './itemizedSplitUtils';
 import type { User } from '../../types/api';
 import type { BooleanById, ItemSplitMethod, NumberById, ReceiptLineItem, StringById } from '../../types/ui';
 
@@ -26,6 +26,10 @@ export default function EditItemSplitModal({ item, activeUsers, currentAssignmen
     return cv;
   });
   const [shares, setShares] = useState<StringById>(() => {
+    if (currentCustom) {
+      const inferred = inferShareWeights(currentCustom);
+      return Object.fromEntries(Object.entries(inferred).map(([key, value]) => [key, String(value)])) as StringById;
+    }
     const s: StringById = {};
     activeUsers.forEach(u => s[u.id] = currentAssignments.includes(u.id) ? '1' : '');
     return s;

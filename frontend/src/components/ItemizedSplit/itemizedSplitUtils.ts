@@ -143,7 +143,10 @@ export function buildReceiptBreakdown(
       const shares = custom
         ? Object.entries(custom)
           .filter(([, amount]) => amount > 0)
-          .map(([userId, amount]) => ({ user_id: Number(userId), amount }))
+          .map(([userId, amount]) => ({
+            user_id: Number(userId),
+            amount,
+          }))
         : itemAssignments[idx].map(userId => ({
           user_id: userId,
           amount: toNumber(item.price) / itemAssignments[idx].length,
@@ -166,4 +169,24 @@ export function buildReceiptBreakdown(
       total: memberTotals[user.id].total,
     })),
   };
+}
+
+export function inferShareWeights(amounts: NumberById): NumberById {
+  const entries = Object.entries(amounts).filter(([, amount]) => amount > 0.005);
+  if (entries.length === 0) return {};
+
+  const cents = entries.map(([, amount]) => Math.round(amount * 100));
+  const divisor = cents.reduce((current, next) => gcd(current, next));
+  return Object.fromEntries(entries.map(([userId], idx) => [Number(userId), cents[idx] / divisor])) as NumberById;
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const next = x % y;
+    x = y;
+    y = next;
+  }
+  return x || 1;
 }
