@@ -228,6 +228,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                      breakdown={expense.receipt_breakdown}
                      users={users}
                      currentUserId={currentUserId}
+                     title={expense.description}
                      onEdit={expense.is_deleted ? undefined : openReceiptSplitEditor}
                   />
                )}
