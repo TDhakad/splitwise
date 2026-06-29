@@ -250,6 +250,106 @@ export interface SpendingAnalytics {
   habits: SpendingHabits;
 }
 
+export interface NetHistoryPoint {
+  month: string;
+  net_cents: number;
+}
+
+export interface AgingBucket {
+  label: string;
+  receivable_cents: number;
+  payable_cents: number;
+}
+
+export interface AgingItem {
+  counterparty_id: number;
+  group_id: number | null;
+  amount_cents: number;
+  direction: 'receivable' | 'payable';
+  age_days: number;
+}
+
+export interface StandingAnalytics {
+  net_history: NetHistoryPoint[];
+  aging: {
+    buckets: AgingBucket[];
+    items: AgingItem[];
+  };
+}
+
+export interface ReceiptItemStat {
+  name: string;
+  count: number;
+  amount_cents: number;
+}
+
+export interface ReceiptItemAnalytics {
+  total_spent_cents: number;
+  purchase_count: number;
+  top_items: ReceiptItemStat[];
+}
+
+export interface GroupStat {
+  group_id: number;
+  name: string;
+  expense_count: number;
+  avg_settlement_days: number;
+  balance_fairness_score: number;
+}
+
+export interface GroupAnalytics {
+  groups: GroupStat[];
+}
+
+export interface SettlementPrediction {
+  counterparty_id: number;
+  group_id: number | null;
+  amount_cents: number;
+  direction: 'receivable' | 'payable';
+  predicted_settlement_days: number;
+  reliability_score: number;
+}
+
+export interface PredictionAnalytics {
+  predictions: SettlementPrediction[];
+}
+
+export interface BrandPreference {
+  brand: string;
+  amount_cents: number;
+}
+
+export interface ShoppingCategory {
+  category: string;
+  amount_cents: number;
+}
+
+export interface MonthlyReceiptVolume {
+  month: string;
+  receipt_count: number;
+}
+
+export interface ShoppingInsights {
+  brand_preferences: BrandPreference[];
+  shopping_categories: ShoppingCategory[];
+  monthly_receipt_volume: MonthlyReceiptVolume[];
+}
+
+export interface CashflowForecast {
+  month: string;
+  estimated_incoming_cents: number;
+  estimated_outgoing_cents: number;
+  net_flow_cents: number;
+}
+
+export interface CashflowAnalytics {
+  current_receivables_cents: number;
+  current_payables_cents: number;
+  avg_monthly_spend_cents: number;
+  avg_settlement_delay_days: number;
+  monthly_forecasts: CashflowForecast[];
+}
+
 export interface PlanAllocationBase {
   category: ExpenseCategory;
   allocated_amount: number;
