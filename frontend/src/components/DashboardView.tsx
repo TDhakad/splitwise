@@ -2,12 +2,33 @@ import { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
+import NetPositionCard from './NetPositionCard';
+import SettlementAgingCard from './SettlementAgingCard';
+import ReceiptItemsCard from './ReceiptItemsCard';
+import GroupHealthCard from './GroupHealthCard';
+import SettlementPredictionCard from './SettlementPredictionCard';
+import ShoppingInsightsCard from './ShoppingInsightsCard';
+import CashflowForecastCard from './CashflowForecastCard';
 import { initials } from '../lib/utils';
-import { useSpendingAnalytics } from '../features/analytics/api';
+import { 
+  useCashflowAnalytics, 
+  useGroupAnalytics, 
+  usePredictionAnalytics, 
+  useReceiptItemAnalytics, 
+  useShoppingInsights, 
+  useSpendingAnalytics, 
+  useStandingAnalytics 
+} from '../features/analytics/api';
 import type { DashboardProps } from '../types/ui';
 
 export default function DashboardView({ balances, rawBalances, groups, users, currentUserId }: DashboardProps) {
     const analyticsQuery = useSpendingAnalytics(Boolean(currentUserId));
+    const standingQuery = useStandingAnalytics(Boolean(currentUserId));
+    const receiptItemsQuery = useReceiptItemAnalytics(Boolean(currentUserId));
+    const groupAnalyticsQuery = useGroupAnalytics(Boolean(currentUserId));
+    const predictionQuery = usePredictionAnalytics(Boolean(currentUserId));
+    const shoppingQuery = useShoppingInsights(Boolean(currentUserId));
+    const cashflowQuery = useCashflowAnalytics(Boolean(currentUserId));
     const netBalance = balances.net_balance || 0;
     const totalOwedToMe = balances.total_owed || 0;
     const totalIOwe = balances.total_owes || 0;
@@ -172,6 +193,10 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                    )}
                 </div>
              </div>
+
+             {standingQuery.data && <NetPositionCard history={standingQuery.data.net_history} />}
+             {standingQuery.data && <SettlementAgingCard aging={standingQuery.data.aging} users={users} currentUserId={currentUserId} />}
+             {cashflowQuery.data && <CashflowForecastCard data={cashflowQuery.data} />}
           </div>
 
           <div className="hidden lg:flex w-full lg:w-[340px] shrink-0 flex-col gap-6">
@@ -229,6 +254,11 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                    {topCategories.length === 0 && <p className="text-sm font-medium text-gray-500 text-center py-4">No category data yet.</p>}
                 </div>
              </div>
+
+             {receiptItemsQuery.data && <ReceiptItemsCard data={receiptItemsQuery.data} />}
+             {groupAnalyticsQuery.data && <GroupHealthCard data={groupAnalyticsQuery.data} />}
+             {predictionQuery.data && <SettlementPredictionCard data={predictionQuery.data} users={users} currentUserId={currentUserId} />}
+             {shoppingQuery.data && <ShoppingInsightsCard data={shoppingQuery.data} />}
           </div>
        </div>
     );
