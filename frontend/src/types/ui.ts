@@ -26,9 +26,11 @@ export type NumberById = Record<number, number>;
 
 export interface SelectedExpenseContext {
   expense: ExpenseWithCreator;
-  from: 'activity' | 'group' | 'preplanning';
+  from: 'activity' | 'group' | 'preplanning' | 'friend';
   groupName?: string;
   planName?: string;
+  friendName?: string;
+  contextName?: string;
 }
 
 export type ExpenseSelectionContext = SelectedExpenseContext;

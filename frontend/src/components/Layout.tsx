@@ -21,7 +21,8 @@ import { useBalanceSummary, useRawBalances, balancesKeys } from '../features/bal
 import { useUserExpenses, expensesKeys } from '../features/expenses/api';
 import { settlementsKeys } from '../features/settlements/api';
 import { plansKeys } from '../features/preplanning/api';
-import type { GroupDetail, Plan } from '../types/api';
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications, useNotificationStream } from '../features/notifications/api';
+import type { GroupDetail, Notification, Plan } from '../types/api';
 import type { AuthView, ExpenseSelectionContext, SettleUpContext } from '../types/ui';
 
 // Provide layout context to children
@@ -59,6 +60,7 @@ export default function Layout() {
   const [selectedExpenseCtx, setSelectedExpenseCtx] = useState<ExpenseSelectionContext | null>(null);
   const [showEditExpense, setShowEditExpense] = useState(false);
   const [settleUpCtx, setSettleUpCtx] = useState<SettleUpContext | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const currentUserQuery = useCurrentUser(token);
   const currentUser = currentUserQuery.data ?? null;
@@ -69,6 +71,10 @@ export default function Layout() {
   const groupsQuery = useGroups(hasUser);
   const balancesQuery = useBalanceSummary(currentUserId ?? undefined);
   const rawBalancesQuery = useRawBalances(currentUserId ?? undefined);
+  const notificationsQuery = useNotifications(hasUser);
+  const markNotificationRead = useMarkNotificationRead();
+  const markAllNotificationsRead = useMarkAllNotificationsRead();
+  useNotificationStream(hasUser);
   
   // Expenses and settlements are fetched in ActivityView to distribute data fetching
   const expensesQuery = useUserExpenses(currentUserId ?? undefined);
@@ -95,6 +101,8 @@ export default function Layout() {
   const balances = balancesQuery.data ?? { total_owes: 0, total_owed: 0, net_balance: 0 };
   const rawBalances = rawBalancesQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
+  const notifications = notificationsQuery.data?.notifications ?? [];
+  const unreadCount = notificationsQuery.data?.unread_count ?? 0;
 
   const selectedExpense = selectedExpenseCtx
     ? expenses.find((e: any) => e.id === selectedExpenseCtx.expense.id) ?? selectedExpenseCtx.expense
@@ -186,9 +194,28 @@ export default function Layout() {
     setSelectedExpenseCtx(null);
   };
 
+  const handlePrimaryNavigation = () => {
+    setShowEditExpense(false);
+    setSelectedExpenseCtx(null);
+  };
+
   const handleSettleUpSaved = () => {
     setSettleUpCtx(null);
     invalidateFinancialQueries();
+  };
+
+  const notificationText = (notification: Notification) => {
+    const payload = notification.payload ?? {};
+    if (notification.type === 'friend_request') return `${payload.requester_name ?? 'Someone'} sent you a friend request`;
+    if (notification.type === 'friend_request_accepted') return `${payload.friend_name ?? 'Someone'} accepted your friend request`;
+    if (notification.type === 'group_member_added') return `You were added to ${payload.group_name ?? 'a group'}`;
+    if (notification.type === 'expense_created') return `New expense: ${payload.description ?? 'Expense'}`;
+    if (notification.type === 'expense_updated') return `Expense updated: ${payload.description ?? 'Expense'}`;
+    if (notification.type === 'expense_deleted') return `Expense deleted: ${payload.description ?? 'Expense'}`;
+    if (notification.type === 'settlement_created') return `New settlement of $${Number(payload.amount ?? 0).toFixed(2)}`;
+    if (notification.type === 'settlement_updated') return `Settlement updated to $${Number(payload.amount ?? 0).toFixed(2)}`;
+    if (notification.type === 'settlement_deleted') return `Settlement deleted`;
+    return 'New notification';
   };
 
   const contextValue: LayoutContextType = {
@@ -224,6 +251,7 @@ export default function Layout() {
                  const isActive = activeTab === t.id || (activeTab === '' && t.id === 'dashboard');
                  return (
                  <Link key={t.id} to={t.to}
+                    onClick={handlePrimaryNavigation}
                     className={clsx('w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold transition-all',
                        isActive ? 'bg-[#EAF5F2] text-[#007A64]' : 'text-gray-600 hover:bg-gray-100/80 hover:text-gray-900')}>
                     <MSIcon name={t.icon} fill={isActive ? 1 : 0} className="text-[22px]" />
@@ -269,10 +297,47 @@ export default function Layout() {
               </div>
               
               <div className="flex items-center gap-5">
-                 <button className="relative text-gray-500 hover:text-gray-900 transition-colors">
-                    <MSIcon name="notifications" />
-                    <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
-                 </button>
+                 <div className="relative">
+                    <button onClick={() => setShowNotifications(prev => !prev)} className="relative text-gray-500 hover:text-gray-900 transition-colors" aria-label="Notifications">
+                       <MSIcon name="notifications" />
+                       {unreadCount > 0 && (
+                          <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 bg-[#D93F3C] text-white text-[10px] font-bold rounded-full border border-white flex items-center justify-center">
+                             {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                       )}
+                    </button>
+                    {showNotifications && (
+                       <div className="absolute right-0 top-10 w-80 max-h-[420px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl z-50">
+                          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                             <h2 className="text-sm font-bold text-gray-900">Notifications</h2>
+                             <button onClick={() => markAllNotificationsRead.mutate()} disabled={unreadCount === 0 || markAllNotificationsRead.isPending} className="text-xs font-bold text-[#007A64] disabled:text-gray-400">
+                                Mark all read
+                             </button>
+                          </div>
+                          <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                             {notifications.length === 0 ? (
+                                <p className="px-4 py-8 text-center text-sm font-medium text-gray-500">No notifications</p>
+                             ) : notifications.slice(0, 20).map(notification => (
+                                <button
+                                   key={notification.id}
+                                   onClick={() => {
+                                      if (!notification.read_at) markNotificationRead.mutate(notification.id);
+                                   }}
+                                   className={clsx('w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors', !notification.read_at && 'bg-[#EAF5F2]/60')}
+                                >
+                                   <div className="flex gap-3">
+                                      <div className={clsx('mt-1 h-2 w-2 rounded-full shrink-0', notification.read_at ? 'bg-gray-300' : 'bg-[#007A64]')} />
+                                      <div className="min-w-0">
+                                         <p className="text-sm font-semibold text-gray-900 leading-snug">{notificationText(notification)}</p>
+                                         <p className="mt-1 text-xs font-medium text-gray-500">{new Date(notification.created_at).toLocaleString()}</p>
+                                      </div>
+                                   </div>
+                                </button>
+                             ))}
+                          </div>
+                       </div>
+                    )}
+                 </div>
                  <button className="text-gray-500 hover:text-gray-900 transition-colors">
                     <MSIcon name="settings" />
                  </button>
@@ -300,6 +365,7 @@ export default function Layout() {
                  <Link
                     key={t.id}
                     to={t.to}
+                    onClick={handlePrimaryNavigation}
                     className={clsx(
                        'min-h-14 rounded-2xl flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-all',
                        isActive

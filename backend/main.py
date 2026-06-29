@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import create_database_tables
 from . import preplanning
-from .routers import auth, expenses, groups, receipts, users
+from .routers import analytics, auth, expenses, groups, notifications, receipts, users
 
 
 @asynccontextmanager
@@ -33,6 +33,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(groups.router)
 app.include_router(expenses.router)
+app.include_router(notifications.router)
+app.include_router(analytics.router)
 app.include_router(receipts.router)
 app.include_router(preplanning.router, prefix="/api/v1")
 

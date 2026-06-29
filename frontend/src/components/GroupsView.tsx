@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import { avatarColor, initials } from '../lib/utils';
@@ -13,6 +14,8 @@ interface GroupsViewProps {
 }
 
 export default function GroupsView({ groups, rawBalances, currentUserId, onCreateGroup, onAddExpense, onSelect }: GroupsViewProps) {
+    const [search, setSearch] = useState('');
+    const [balanceFilter, setBalanceFilter] = useState<'all' | 'owed' | 'owe' | 'settled'>('all');
     const calculateGroupNet = (groupId: number) => {
         let net = 0;
         rawBalances.forEach(b => {
@@ -23,6 +26,15 @@ export default function GroupsView({ groups, rawBalances, currentUserId, onCreat
         });
         return net;
     };
+    const filteredGroups = groups.filter(group => {
+        const net = calculateGroupNet(group.id);
+        const matchesSearch = !search || group.name.toLowerCase().includes(search.toLowerCase()) || (group.description ?? '').toLowerCase().includes(search.toLowerCase());
+        const matchesBalance = balanceFilter === 'all'
+            || (balanceFilter === 'owed' && net > 0)
+            || (balanceFilter === 'owe' && net < 0)
+            || (balanceFilter === 'settled' && net === 0);
+        return matchesSearch && matchesBalance;
+    });
 
     return (
        <div className="max-w-[1400px] mx-auto p-8 h-full overflow-y-auto">
@@ -36,8 +48,18 @@ export default function GroupsView({ groups, rawBalances, currentUserId, onCreat
              </button>
           </div>
 
+          <div className="mb-6 flex flex-col sm:flex-row gap-3">
+             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search groups" className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 outline-none focus:border-[#007A64] sm:w-80" />
+             <select value={balanceFilter} onChange={e => setBalanceFilter(e.target.value as typeof balanceFilter)} className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 outline-none focus:border-[#007A64] sm:w-48">
+                <option value="all">All balances</option>
+                <option value="owed">You are owed</option>
+                <option value="owe">You owe</option>
+                <option value="settled">Settled</option>
+             </select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-             {groups.map(g => {
+             {filteredGroups.map(g => {
                 const net = calculateGroupNet(g.id);
                 return (
                    <div key={g.id} onClick={() => onSelect(g.id)} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col hover:shadow-lg transition-shadow relative cursor-pointer">
@@ -110,6 +132,11 @@ export default function GroupsView({ groups, rawBalances, currentUserId, onCreat
                    </div>
                 );
              })}
+             {filteredGroups.length === 0 && (
+                <div className="col-span-full rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">
+                   No groups match these filters.
+                </div>
+             )}
           </div>
        </div>
     );

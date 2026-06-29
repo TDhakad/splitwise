@@ -13,7 +13,8 @@ interface SplitSummaryPanelProps {
   assignedSum: number;
   unassigned: number;
   memberTotals: Record<number, MemberTotal>;
-  isFullyAssigned: boolean;
+  canFinish: boolean;
+  itemizedError: string;
   onFinish: () => void;
 }
 
@@ -25,7 +26,8 @@ export default function SplitSummaryPanel({
   assignedSum,
   unassigned,
   memberTotals,
-  isFullyAssigned,
+  canFinish,
+  itemizedError,
   onFinish,
 }: SplitSummaryPanelProps) {
   const subtotal = toNumber(receiptData.subtotal);
@@ -96,19 +98,20 @@ export default function SplitSummaryPanel({
 
       <button
         onClick={onFinish}
-        disabled={!isFullyAssigned}
+        disabled={!canFinish}
         className={clsx(
           "w-full font-bold py-3.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-base",
-          isFullyAssigned ? "bg-[#007A64] hover:bg-[#006150] text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"
+          canFinish ? "bg-[#007A64] hover:bg-[#006150] text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"
         )}
       >
         Finish Split <MSIcon name="arrow_forward" />
       </button>
 
-      {!isFullyAssigned && (
-        <p className="text-center text-xs text-red-500 mt-3 font-medium">
-          Assign all items to finish.
-        </p>
+      {itemizedError && (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-xs font-medium text-red-700">
+          <MSIcon name="error_outline" className="text-red-500 shrink-0 mt-0.5" style={{ fontSize: 16 }} />
+          <span>{itemizedError}</span>
+        </div>
       )}
     </div>
   );

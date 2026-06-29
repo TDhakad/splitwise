@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import clsx from 'clsx';
 import MSIcon from './MSIcon';
 import { initials } from '../lib/utils';
+import { useSpendingAnalytics } from '../features/analytics/api';
 import type { DashboardProps } from '../types/ui';
 
 export default function DashboardView({ balances, rawBalances, groups, users, currentUserId }: DashboardProps) {
+    const analyticsQuery = useSpendingAnalytics(Boolean(currentUserId));
     const netBalance = balances.net_balance || 0;
     const totalOwedToMe = balances.total_owed || 0;
     const totalIOwe = balances.total_owes || 0;
@@ -35,6 +38,14 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
            net: groupBalancesMap[g.id] || 0
         }));
     }, [rawBalances, groups, currentUserId]);
+
+    const spendingAnalytics = analyticsQuery.data;
+    const monthlyChartData = (spendingAnalytics?.monthly ?? []).map(item => ({
+        month: new Date(`${item.month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short' }),
+        amount: item.amount_cents / 100,
+    }));
+    const topCategories = spendingAnalytics?.categories.slice(0, 3) ?? [];
+    const maxCategoryAmount = Math.max(...topCategories.map(category => category.amount_cents), 1);
 
     return (
        <div className="flex flex-col lg:flex-row gap-8 max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
@@ -143,24 +154,22 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
                    </button>
                 </div>
                 
-                <div className="h-48 relative border-b border-gray-100 pb-6 mb-2">
-                   <div className="absolute left-0 top-0 bottom-6 w-8 flex flex-col justify-between text-[10px] text-gray-400 font-medium">
-                      <span>$1k</span>
-                      <span>$500</span>
-                      <span>$0</span>
-                   </div>
-                   <div className="ml-10 h-full flex items-end justify-between gap-4">
-                      {[
-                         { m: 'Jan', v: 35 }, { m: 'Feb', v: 45 }, { m: 'Mar', v: 40 },
-                         { m: 'Apr', v: 60 }, { m: 'May', v: 30 }, { m: 'Jun', v: 75 }
-                      ].map(d => (
-                         <div key={d.m} className="flex flex-col items-center flex-1 h-full justify-end relative group">
-                            <div className="w-full max-w-[48px] bg-[#AECFC6] group-hover:bg-[#8ABBAF] rounded-t-sm transition-all" style={{ height: `${d.v}%` }} />
-                            {d.m === 'Jun' && <div className="absolute bottom-0 w-full max-w-[48px] bg-[#007A64] rounded-t-sm transition-all shadow-md" style={{ height: `${d.v}%` }} />}
-                            <span className={clsx("absolute -bottom-6 text-xs font-medium", d.m === 'Jun' ? "text-[#007A64] font-bold" : "text-gray-500")}>{d.m}</span>
-                         </div>
-                      ))}
-                   </div>
+                <div className="h-56">
+                   {monthlyChartData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center rounded-xl bg-gray-50 text-sm font-semibold text-gray-500">
+                         No spending data yet.
+                      </div>
+                   ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={monthlyChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                            <CartesianGrid vertical={false} stroke="#F1F5F9" />
+                            <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#64748B', fontSize: 12, fontWeight: 600 }} />
+                            <YAxis tickLine={false} axisLine={false} tick={{ fill: '#94A3B8', fontSize: 11 }} tickFormatter={(value) => `$${value}`} />
+                            <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Spent']} cursor={{ fill: '#F8FAFC' }} />
+                            <Bar dataKey="amount" fill="#007A64" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                         </BarChart>
+                      </ResponsiveContainer>
+                   )}
                 </div>
              </div>
           </div>
@@ -196,29 +205,28 @@ export default function DashboardView({ balances, rawBalances, groups, users, cu
              </div>
 
              <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-bold text-gray-900 mb-6">Top Categories</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Top Categories</h3>
+                <p className="text-xs font-semibold text-gray-500 mb-6">
+                   {spendingAnalytics?.habits.transaction_count ?? 0} expenses · average ${(spendingAnalytics?.habits.average_transaction_cents ?? 0) / 100}
+                </p>
                 <div className="space-y-6">
-                   <div className="flex items-center gap-4">
-                      <div className="w-9 h-9 rounded-full bg-[#EAF5F2] text-[#007A64] flex items-center justify-center shrink-0"><MSIcon name="restaurant" className="text-[18px]" /></div>
-                      <div className="flex-1">
-                         <div className="flex justify-between text-[13px] mb-1.5"><span className="font-semibold text-gray-900">Dining Out</span><span className="text-gray-600 font-medium">$450</span></div>
-                         <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#007A64] rounded-full w-[70%]" /></div>
+                   {topCategories.map((category, index) => (
+                      <div key={category.category} className="flex items-center gap-4">
+                         <div className={clsx("w-9 h-9 rounded-full flex items-center justify-center shrink-0", index === 0 ? "bg-[#EAF5F2] text-[#007A64]" : index === 1 ? "bg-gray-100 text-gray-600" : "bg-red-50 text-[#D93F3C]")}>
+                            <MSIcon name={category.category === 'Dining' ? 'restaurant' : category.category === 'Groceries' ? 'shopping_cart' : category.category === 'Transport' ? 'directions_car' : 'category'} className="text-[18px]" />
+                         </div>
+                         <div className="flex-1">
+                            <div className="flex justify-between text-[13px] mb-1.5">
+                               <span className="font-semibold text-gray-900">{category.category}</span>
+                               <span className="text-gray-600 font-medium">${(category.amount_cents / 100).toFixed(2)}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                               <div className={clsx("h-full rounded-full", index === 0 ? "bg-[#007A64]" : index === 1 ? "bg-gray-500" : "bg-[#D93F3C]")} style={{ width: `${Math.max(8, (category.amount_cents / maxCategoryAmount) * 100)}%` }} />
+                            </div>
+                         </div>
                       </div>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center shrink-0"><MSIcon name="shopping_cart" className="text-[18px]" /></div>
-                      <div className="flex-1">
-                         <div className="flex justify-between text-[13px] mb-1.5"><span className="font-semibold text-gray-900">Groceries</span><span className="text-gray-600 font-medium">$280</span></div>
-                         <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-gray-500 rounded-full w-[45%]" /></div>
-                      </div>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <div className="w-9 h-9 rounded-full bg-red-50 text-[#D93F3C] flex items-center justify-center shrink-0"><MSIcon name="flight" className="text-[18px]" /></div>
-                      <div className="flex-1">
-                         <div className="flex justify-between text-[13px] mb-1.5"><span className="font-semibold text-gray-900">Travel</span><span className="text-gray-600 font-medium">$150</span></div>
-                         <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-[#D93F3C] rounded-full w-[25%]" /></div>
-                      </div>
-                   </div>
+                   ))}
+                   {topCategories.length === 0 && <p className="text-sm font-medium text-gray-500 text-center py-4">No category data yet.</p>}
                 </div>
              </div>
           </div>

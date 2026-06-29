@@ -51,7 +51,10 @@ export interface GroupBase {
   simplify_debts?: boolean;
 }
 
-export type GroupCreate = GroupBase;
+export interface GroupCreate extends GroupBase {
+  member_ids?: number[];
+  member_emails?: string[];
+}
 
 export interface Group extends GroupBase {
   id: number;
@@ -61,6 +64,11 @@ export interface Group extends GroupBase {
 
 export interface GroupDetail extends Group {
   members: User[];
+}
+
+export interface GroupMemberCreate {
+  user_id?: number;
+  email?: string;
 }
 
 export interface BalanceSummary {
@@ -199,6 +207,47 @@ export interface Friendship {
 export interface FriendshipWithUsers extends Friendship {
   requester: User;
   addressee: User;
+}
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  type: string;
+  actor_user_id?: number | null;
+  target_type: string;
+  target_id?: number | null;
+  payload: Record<string, unknown>;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface NotificationList {
+  notifications: Notification[];
+  unread_count: number;
+}
+
+export interface SpendingMonthlyTotal {
+  month: string;
+  amount_cents: number;
+}
+
+export interface SpendingCategoryTotal {
+  category: string;
+  amount_cents: number;
+}
+
+export interface SpendingHabits {
+  total_cents: number;
+  average_monthly_cents: number;
+  transaction_count: number;
+  average_transaction_cents: number;
+  top_category?: string | null;
+}
+
+export interface SpendingAnalytics {
+  monthly: SpendingMonthlyTotal[];
+  categories: SpendingCategoryTotal[];
+  habits: SpendingHabits;
 }
 
 export interface PlanAllocationBase {

@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import models
@@ -12,6 +12,44 @@ from . import schemas
 
 def to_cents(amount: float) -> int:
     return round(amount * 100)
+
+async def ensure_friendship_between(
+    db: AsyncSession,
+    requester_id: int,
+    addressee_id: int,
+    status: str = "ACCEPTED",
+) -> models.Friendship | None:
+    if requester_id == addressee_id:
+        return None
+
+    existing_result = await db.execute(
+        select(models.Friendship).where(
+            or_(
+                and_(
+                    models.Friendship.requester_id == requester_id,
+                    models.Friendship.addressee_id == addressee_id,
+                ),
+                and_(
+                    models.Friendship.requester_id == addressee_id,
+                    models.Friendship.addressee_id == requester_id,
+                ),
+            )
+        )
+    )
+    friendship = existing_result.scalar_one_or_none()
+    if friendship:
+        friendship.status = status
+        friendship.requester_id = requester_id
+        friendship.addressee_id = addressee_id
+        return friendship
+
+    friendship = models.Friendship(
+        requester_id=requester_id,
+        addressee_id=addressee_id,
+        status=status,
+    )
+    db.add(friendship)
+    return friendship
 
 async def compute_balances_for_group(db: AsyncSession, group_id: int | None) -> list[dict]:
     group = await db.get(models.Group, group_id) if group_id is not None else None

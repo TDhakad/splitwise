@@ -36,6 +36,15 @@ export default function useItemizedSplit(
   const assignedSum = Object.values(memberTotals).reduce((sum, total) => sum + total.total, 0);
   const unassigned = receiptTotal - assignedSum;
   const isFullyAssigned = itemAssignments.every(assignment => assignment.length > 0);
+  const missingItemNames = receiptData.items
+    .map((item, idx) => itemAssignments[idx]?.length ? null : item.name || `Item ${idx + 1}`)
+    .filter((name): name is string => Boolean(name));
+  const itemizedError = missingItemNames.length > 0
+    ? `${missingItemNames.length} item${missingItemNames.length === 1 ? '' : 's'} need assignment: ${missingItemNames.slice(0, 3).join(', ')}${missingItemNames.length > 3 ? ', ...' : ''}.`
+    : Math.abs(unassigned) > 0.01
+      ? `Assigned total is ${unassigned > 0 ? `$${unassigned.toFixed(2)} short` : `$${Math.abs(unassigned).toFixed(2)} over`}. Check item prices, tax, tip, discount, or receipt total.`
+      : '';
+  const canFinish = !itemizedError;
 
   const toggleUserForItem = (itemIndex: number, userId: number) => {
     setItemAssignments(prev => {
@@ -73,6 +82,14 @@ export default function useItemizedSplit(
     setEditingItemIdx(null);
   };
 
+  const clearCustomSplit = (idx: number) => {
+    setCustomSplits(prev => {
+      const next = [...prev];
+      next[idx] = null;
+      return next;
+    });
+  };
+
   const buildParticipants = () => buildReceiptParticipants(activeUsers, payerId, receiptTotal, memberTotals);
   const buildBreakdown = () => buildReceiptBreakdown(receiptData, activeUsers, itemAssignments, customSplits, memberTotals);
 
@@ -81,8 +98,11 @@ export default function useItemizedSplit(
     assignedSum,
     buildBreakdown,
     buildParticipants,
+    clearCustomSplit,
     customSplits,
     editingItemIdx,
+    canFinish,
+    itemizedError,
     isFullyAssigned,
     itemAssignments,
     memberTotals,

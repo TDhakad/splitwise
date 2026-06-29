@@ -1,72 +1,51 @@
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..datetime_utils import as_naive_utc
 from ..dependencies import bounded_limit, require_group_manager, require_group_member
-from ..services import compute_balances_for_group, create_audit_log_background
+from ..notifications import create_notification
+from ..services import compute_balances_for_group, create_audit_log_background, ensure_friendship_between
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
 
-@router.post("/", response_model=schemas.Group)
-async def create_group(
-    group: schemas.GroupCreate,
-    background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    db_group = models.Group(**group.model_dump(), created_by=current_user.id)
-    db.add(db_group)
+async def add_member_to_group(
+    db: AsyncSession,
+    group: models.Group,
+    user: models.User,
+    actor: models.User,
+) -> bool:
+    if user.id in {member.user_id for member in group.members}:
+        return False
+
+    existing_member_ids = [member.user_id for member in group.members]
+    db.add(models.GroupMember(group_id=group.id, user_id=user.id))
     await db.flush()
 
-    db.add(models.GroupMember(group_id=db_group.id, user_id=current_user.id))
-    await db.commit()
-    background_tasks.add_task(create_audit_log_background, "Group", db_group.id, current_user.id, "CREATE")
-    await db.refresh(db_group)
-    return db_group
+    for member_id in existing_member_ids:
+        await ensure_friendship_between(db, actor.id, member_id)
+        await ensure_friendship_between(db, user.id, member_id)
 
-
-@router.get("/", response_model=list[schemas.GroupDetail])
-async def read_groups(
-    skip: int = 0,
-    limit: int = Depends(bounded_limit),
-    current_user: models.User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    groups_result = await db.execute(
-        select(models.Group)
-        .options(selectinload(models.Group.members).selectinload(models.GroupMember.user))
-        .join(models.GroupMember)
-        .where(models.GroupMember.user_id == current_user.id)
-        .offset(skip)
-        .limit(limit)
+    await create_notification(
+        db,
+        user.id,
+        "group_member_added",
+        actor.id,
+        "Group",
+        group.id,
+        {"group_name": group.name},
     )
-    groups = groups_result.scalars().unique().all()
-    return [
-        {
-            "id": group.id,
-            "name": group.name,
-            "description": group.description,
-            "simplify_debts": group.simplify_debts,
-            "created_by": group.created_by,
-            "created_at": group.created_at,
-            "members": [member.user for member in group.members],
-        }
-        for group in groups
-    ]
+    return True
 
 
-@router.get("/{group_id}", response_model=schemas.GroupDetail)
-async def read_group(
-    group_id: int,
-    current_user: models.User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    group = await require_group_member(db, group_id, current_user.id)
+def group_detail_response(group: models.Group) -> dict:
     return {
         "id": group.id,
         "name": group.name,
@@ -78,20 +57,135 @@ async def read_group(
     }
 
 
-@router.get("/{group_id}/expenses", response_model=list[schemas.ExpenseWithCreator])
-async def read_group_expenses(
+@router.post("/", response_model=schemas.GroupDetail)
+async def create_group(
+    group: schemas.GroupCreate,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    group_data = group.model_dump(exclude={"member_ids", "member_emails"})
+    db_group = models.Group(**group_data, created_by=current_user.id)
+    db.add(db_group)
+    await db.flush()
+
+    db.add(models.GroupMember(group_id=db_group.id, user_id=current_user.id))
+    await db.flush()
+
+    users_by_id = {}
+    if group.member_ids:
+        users_result = await db.execute(select(models.User).where(models.User.id.in_(set(group.member_ids))))
+        users_by_id = {user.id: user for user in users_result.scalars().all()}
+        missing_ids = set(group.member_ids) - set(users_by_id)
+        if missing_ids:
+            raise HTTPException(status_code=404, detail="One or more users were not found")
+
+    users_by_email = {}
+    if group.member_emails:
+        normalized_emails = {email.lower() for email in group.member_emails}
+        users_result = await db.execute(select(models.User).where(func.lower(models.User.email).in_(normalized_emails)))
+        users_by_email = {user.email.lower(): user for user in users_result.scalars().all()}
+        missing_emails = normalized_emails - set(users_by_email)
+        if missing_emails:
+            raise HTTPException(status_code=404, detail="One or more users were not found")
+
+    users_to_add = {
+        user.id: user
+        for user in [*users_by_id.values(), *users_by_email.values()]
+        if user.id != current_user.id
+    }
+    member_ids = [current_user.id]
+    for user in users_to_add.values():
+        db.add(models.GroupMember(group_id=db_group.id, user_id=user.id))
+        await db.flush()
+        for member_id in member_ids:
+            await ensure_friendship_between(db, user.id, member_id)
+        await create_notification(
+            db,
+            user.id,
+            "group_member_added",
+            current_user.id,
+            "Group",
+            db_group.id,
+            {"group_name": db_group.name},
+        )
+        member_ids.append(user.id)
+
+    await db.commit()
+    background_tasks.add_task(create_audit_log_background, "Group", db_group.id, current_user.id, "CREATE")
+    reloaded = await require_group_member(db, db_group.id, current_user.id)
+    return group_detail_response(reloaded)
+
+
+@router.get("/", response_model=list[schemas.GroupDetail])
+async def read_groups(
+    skip: int = 0,
+    limit: int = Depends(bounded_limit),
+    search: str | None = None,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    filters = [models.GroupMember.user_id == current_user.id]
+    if search:
+        filters.append(models.Group.name.ilike(f"%{search}%"))
+    groups_result = await db.execute(
+        select(models.Group)
+        .options(selectinload(models.Group.members).selectinload(models.GroupMember.user))
+        .join(models.GroupMember)
+        .where(*filters)
+        .offset(skip)
+        .limit(limit)
+    )
+    groups = groups_result.scalars().unique().all()
+    return [
+        group_detail_response(group)
+        for group in groups
+    ]
+
+
+@router.get("/{group_id}", response_model=schemas.GroupDetail)
+async def read_group(
     group_id: int,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    group = await require_group_member(db, group_id, current_user.id)
+    return group_detail_response(group)
+
+
+@router.get("/{group_id}/expenses", response_model=list[schemas.ExpenseWithCreator])
+async def read_group_expenses(
+    group_id: int,
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
+    category: str | None = None,
+    plan_id: int | None = None,
+    search: str | None = None,
+    include_deleted: bool = False,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     await require_group_member(db, group_id, current_user.id)
+    filters = [models.Expense.group_id == group_id]
+    if not include_deleted:
+        filters.append(models.Expense.is_deleted == False)
+    if start_date is not None:
+        filters.append(models.Expense.date >= as_naive_utc(start_date))
+    if end_date is not None:
+        filters.append(models.Expense.date <= as_naive_utc(end_date))
+    if category:
+        filters.append(models.Expense.category == category)
+    if plan_id is not None:
+        filters.append(models.Expense.plan_id == plan_id)
+    if search:
+        filters.append(models.Expense.description.ilike(f"%{search}%"))
     expenses_result = await db.execute(
         select(models.Expense)
         .options(
             selectinload(models.Expense.participants),
             joinedload(models.Expense.creator),
         )
-        .where(models.Expense.group_id == group_id)
+        .where(*filters)
         .order_by(models.Expense.date.desc())
     )
     result = []
@@ -105,13 +199,20 @@ async def read_group_expenses(
 @router.get("/{group_id}/settlements", response_model=list[schemas.Settlement])
 async def read_group_settlements(
     group_id: int,
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await require_group_member(db, group_id, current_user.id)
+    filters = [models.Settlement.group_id == group_id]
+    if start_date is not None:
+        filters.append(models.Settlement.date >= as_naive_utc(start_date))
+    if end_date is not None:
+        filters.append(models.Settlement.date <= as_naive_utc(end_date))
     settlements_result = await db.execute(
         select(models.Settlement)
-        .where(models.Settlement.group_id == group_id)
+        .where(*filters)
         .order_by(models.Settlement.date.desc())
     )
     return settlements_result.scalars().all()
@@ -143,7 +244,32 @@ async def add_group_member(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.add(models.GroupMember(group_id=group_id, user_id=user_id))
+    await add_member_to_group(db, group, user, current_user)
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.post("/{group_id}/members")
+async def add_group_member_by_payload(
+    group_id: int,
+    member: schemas.GroupMemberCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if member.user_id is None and member.email is None:
+        raise HTTPException(status_code=400, detail="Provide user_id or email")
+
+    group = await require_group_manager(db, group_id, current_user.id)
+    user = None
+    if member.user_id is not None:
+        user = await db.get(models.User, member.user_id)
+    elif member.email is not None:
+        result = await db.execute(select(models.User).where(func.lower(models.User.email) == member.email.lower()))
+        user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await add_member_to_group(db, group, user, current_user)
     await db.commit()
     return {"status": "success"}
 

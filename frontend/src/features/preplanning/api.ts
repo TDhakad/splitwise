@@ -14,14 +14,30 @@ import type {
 
 export const plansKeys = {
   all: ['preplanning'] as const,
-  list: () => ['preplanning', 'plans'] as const,
+  list: (filters?: PlanFilters) => ['preplanning', 'plans', filters ?? {}] as const,
   detail: (planId: number | null | undefined) => ['preplanning', 'plans', planId] as const,
 };
 
-export function usePlans(enabled = true) {
+export interface PlanFilters {
+  status?: string;
+  type?: string;
+  group_id?: number;
+  search?: string;
+}
+
+function toQueryString(params: object) {
+  const search = new URLSearchParams();
+  Object.entries(params as Record<string, string | number | boolean | undefined>).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+export function usePlans(enabled = true, filters: PlanFilters = {}) {
   return useQuery<Plan[], ApiError>({
-    queryKey: plansKeys.list(),
-    queryFn: () => apiJson<Plan[]>('/api/v1/preplanning/plans'),
+    queryKey: plansKeys.list(filters),
+    queryFn: () => apiJson<Plan[]>(`/api/v1/preplanning/plans${toQueryString(filters)}`),
     enabled,
     staleTime: 30_000,
   });

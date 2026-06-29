@@ -6,27 +6,45 @@ import type { ActivityItem, ExpenseActivity, SettlementActivity } from '../types
 
 import { SettlementDetailModal } from './SettlementDetailModal';
 import { useDeleteSettlement } from '../features/settlements/api';
+import { useUserExpenses } from '../features/expenses/api';
+import { useUserSettlements } from '../features/settlements/api';
 
 type ActivityFilter = 'All' | 'Expenses' | 'Settlements' | 'Groups';
 
 interface ActivityViewProps {
-  expenses: ExpenseWithCreator[];
-  settlements: Settlement[];
   groups: GroupDetail[];
   users: User[];
   currentUserId: number;
   onSelectExpense: (expense: ExpenseWithCreator) => void;
 }
 
-export default function ActivityView({ expenses, settlements, groups, users, currentUserId, onSelectExpense }: ActivityViewProps) {
+export default function ActivityView({ groups, users, currentUserId, onSelectExpense }: ActivityViewProps) {
   const [filter, setFilter] = useState<ActivityFilter>('All');
   const [visibleCount, setVisibleCount] = useState(25);
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const expensesQuery = useUserExpenses(currentUserId, {
+    include_deleted: true,
+    search,
+    category,
+    start_date: startDate ? new Date(startDate).toISOString() : undefined,
+    end_date: endDate ? new Date(endDate).toISOString() : undefined,
+  });
+  const settlementsQuery = useUserSettlements(currentUserId, {
+    start_date: startDate ? new Date(startDate).toISOString() : undefined,
+    end_date: endDate ? new Date(endDate).toISOString() : undefined,
+  });
 
   const handleFilterChange = (nextFilter: ActivityFilter) => {
     setFilter(nextFilter);
     setVisibleCount(25);
   };
+
+  const expenses = expensesQuery.data ?? [];
+  const settlements = settlementsQuery.data ?? [];
   
   const expenseActivities: ExpenseActivity[] = expenses.flatMap(e => {
      const me = e.participants?.find(p => p.user_id === currentUserId);
@@ -180,6 +198,15 @@ export default function ActivityView({ expenses, settlements, groups, users, cur
                  </button>
               ))}
            </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search expenses" className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
+          <select value={category} onChange={e => setCategory(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]">
+            <option value="">All categories</option>
+            {['Dining', 'Accommodation', 'Transport', 'Groceries', 'Entertainment', 'General'].map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
         </div>
       </div>
 

@@ -17,6 +17,7 @@ interface CustomDropdownProps<T extends DropdownValue, TOption extends DropdownO
   renderOption: (option: TOption, isSelected: boolean) => ReactNode;
   placeholder?: string;
   className?: string;
+  triggerClassName?: string;
 }
 
 export default function CustomDropdown<T extends DropdownValue, TOption extends DropdownOption<T>>({ 
@@ -26,7 +27,8 @@ export default function CustomDropdown<T extends DropdownValue, TOption extends 
   renderSelected, 
   renderOption,
   placeholder = 'Select...',
-  className = ''
+  className = '',
+  triggerClassName = '',
 }: CustomDropdownProps<T, TOption>) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +50,8 @@ export default function CustomDropdown<T extends DropdownValue, TOption extends 
       <div 
         className={clsx(
           "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer transition-colors",
-          isOpen ? "bg-gray-50 border-[#007A64] ring-1 ring-[#007A64]" : "bg-white hover:bg-gray-50"
+          isOpen ? "bg-gray-50 border-[#007A64] ring-1 ring-[#007A64]" : "bg-white hover:bg-gray-50",
+          triggerClassName
         )}
         onClick={() => setIsOpen(!isOpen)}
       >

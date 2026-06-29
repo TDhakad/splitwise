@@ -40,11 +40,24 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
   const [memberError, setMemberError] = useState('');
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
   const [memberToRemove, setMemberToRemove] = useState<User | null>(null);
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [transactionCategory, setTransactionCategory] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const debouncedMemberQuery = useDebouncedValue(memberQuery);
+  const debouncedTransactionSearch = useDebouncedValue(transactionSearch);
 
   const groupQuery = useGroup(groupId);
-  const expensesQuery = useGroupExpenses(groupId);
-  const settlementsQuery = useGroupSettlements(groupId);
+  const expensesQuery = useGroupExpenses(groupId, {
+    search: debouncedTransactionSearch,
+    category: transactionCategory,
+    start_date: startDate ? new Date(startDate).toISOString() : undefined,
+    end_date: endDate ? new Date(endDate).toISOString() : undefined,
+  });
+  const settlementsQuery = useGroupSettlements(groupId, {
+    start_date: startDate ? new Date(startDate).toISOString() : undefined,
+    end_date: endDate ? new Date(endDate).toISOString() : undefined,
+  });
   const balancesQuery = useGroupBalances(groupId);
   const updateSimplify = useUpdateGroupSimplify(groupId, currentUserId);
   const addMember = useAddGroupMember(groupId);
@@ -91,13 +104,30 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
     (u.name.toLowerCase().includes(debouncedMemberQuery.toLowerCase()) ||
       (u.email ?? '').toLowerCase().includes(debouncedMemberQuery.toLowerCase()))
   );
+  const normalizedMemberQuery = debouncedMemberQuery.trim().toLowerCase();
+  const canAddExactEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedMemberQuery)
+    && !groupDetail.members.some(member => member.email?.toLowerCase() === normalizedMemberQuery)
+    && !users.some(user => user.email?.toLowerCase() === normalizedMemberQuery);
 
   const handleAddMember = async (user: User) => {
     if (addMember.isPending) return;
     setMemberError('');
 
     try {
-      await addMember.mutateAsync(user.id);
+      await addMember.mutateAsync({ user_id: user.id });
+      setShowAddMember(false);
+      setMemberQuery('');
+    } catch (e) {
+      setMemberError(getErrorMessage(e));
+    }
+  };
+
+  const handleAddMemberByEmail = async () => {
+    if (addMember.isPending || !canAddExactEmail) return;
+    setMemberError('');
+
+    try {
+      await addMember.mutateAsync({ email: normalizedMemberQuery });
       setShowAddMember(false);
       setMemberQuery('');
     } catch (e) {
@@ -150,6 +180,15 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
                   </button>
                </div>
             </div>
+            <div className="mb-5 grid grid-cols-1 sm:grid-cols-4 gap-3">
+               <input value={transactionSearch} onChange={e => setTransactionSearch(e.target.value)} placeholder="Search" className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
+               <select value={transactionCategory} onChange={e => setTransactionCategory(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]">
+                  <option value="">All categories</option>
+                  {['Dining', 'Accommodation', 'Transport', 'Groceries', 'Entertainment', 'General'].map(item => <option key={item} value={item}>{item}</option>)}
+               </select>
+               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
+               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium outline-none focus:border-[#007A64]" />
+            </div>
             {!transactions.length
                ? <div className="flex flex-col items-center py-16 text-gray-400"><MSIcon name="receipt_long" className="text-5xl mb-3 opacity-30" /><p>No transactions yet.</p></div>
                : <div className="space-y-2">
@@ -193,6 +232,7 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
                            type="text"
                            value={memberQuery}
                            onChange={e => setMemberQuery(e.target.value)}
+                           onKeyDown={e => { if (e.key === 'Enter' && canAddExactEmail) { e.preventDefault(); handleAddMemberByEmail(); } }}
                            placeholder="Search friends"
                            className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#007A64] focus:ring-2 focus:ring-[#007A64]/10"
                         />
@@ -207,10 +247,22 @@ export default function GroupDetailView({ groupId, currentUserId, users, onAddEx
                                  <p className="truncate text-sm font-bold text-gray-900">{user.name}</p>
                                  <p className="truncate text-xs text-gray-500">{user.email}</p>
                               </div>
-                              {addMember.isPending && addMember.variables === user.id ? <MSIcon name="refresh" className="animate-spin text-[#007A64]" /> : <MSIcon name="add" className="text-[#007A64]" />}
+                              {addMember.isPending && addMember.variables?.user_id === user.id ? <MSIcon name="refresh" className="animate-spin text-[#007A64]" /> : <MSIcon name="add" className="text-[#007A64]" />}
                            </button>
                         ))}
-                        {addableMembers.length === 0 && (
+                        {canAddExactEmail && (
+                           <button onClick={handleAddMemberByEmail} disabled={addMember.isPending} className="w-full flex items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-white disabled:opacity-60 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-[#EAF5F2] text-[#007A64] flex items-center justify-center">
+                                 <MSIcon name="alternate_email" className="text-lg" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                 <p className="truncate text-sm font-bold text-gray-900">Add by email</p>
+                                 <p className="truncate text-xs text-gray-500">{normalizedMemberQuery}</p>
+                              </div>
+                              {addMember.isPending && addMember.variables?.email === normalizedMemberQuery ? <MSIcon name="refresh" className="animate-spin text-[#007A64]" /> : <MSIcon name="add" className="text-[#007A64]" />}
+                           </button>
+                        )}
+                        {addableMembers.length === 0 && !canAddExactEmail && (
                            <p className="px-2 py-4 text-center text-xs font-semibold text-gray-500">No available friends</p>
                         )}
                      </div>

@@ -9,6 +9,7 @@ from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
 from ..dependencies import bounded_limit
+from ..notifications import create_notification
 
 router = APIRouter(tags=["users", "friends"])
 
@@ -86,6 +87,15 @@ async def send_friend_request(
             existing.requester_id = current_user.id
             existing.addressee_id = addressee.id
             existing.updated_at = datetime.datetime.now(datetime.timezone.utc)
+            await create_notification(
+                db,
+                addressee.id,
+                "friend_request",
+                current_user.id,
+                "Friendship",
+                existing.id,
+                {"requester_name": current_user.name},
+            )
             await db.commit()
             await db.refresh(existing)
             return existing
@@ -97,6 +107,16 @@ async def send_friend_request(
         status="PENDING",
     )
     db.add(new_request)
+    await db.flush()
+    await create_notification(
+        db,
+        addressee.id,
+        "friend_request",
+        current_user.id,
+        "Friendship",
+        new_request.id,
+        {"requester_name": current_user.name},
+    )
     await db.commit()
     await db.refresh(new_request)
     return new_request
@@ -124,6 +144,16 @@ async def update_friend_request(
 
     friendship.status = status
     friendship.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    if status == "ACCEPTED":
+        await create_notification(
+            db,
+            friendship.requester_id,
+            "friend_request_accepted",
+            current_user.id,
+            "Friendship",
+            friendship.id,
+            {"friend_name": current_user.name},
+        )
     await db.commit()
     await db.refresh(friendship)
     return friendship

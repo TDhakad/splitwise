@@ -22,11 +22,38 @@ export default function ReviewReceiptStep({ receiptImage, receiptData, setReceip
   const [total, setTotal] = useState(receiptData?.total?.toString() || '0');
 
   const receiptHref = receiptImage ? (receiptImage.startsWith('http') ? receiptImage : `${API_BASE_URL}${receiptImage}`) : '';
+  const toAmount = (value: number | string | null | undefined) => parseFloat(String(value ?? '0')) || 0;
+  const calculateTotal = (
+    nextSubtotal = subtotal,
+    nextDiscount = discount,
+    nextTax = tax,
+    nextTip = tip,
+  ) => toAmount(nextSubtotal) - toAmount(nextDiscount) + toAmount(nextTax) + toAmount(nextTip);
+
+  const updateTotalPart = (
+    setter: Dispatch<SetStateAction<string>>,
+    value: string,
+    nextParts: { subtotal?: string; discount?: string; tax?: string; tip?: string },
+  ) => {
+    setter(value);
+    setTotal(calculateTotal(
+      nextParts.subtotal ?? subtotal,
+      nextParts.discount ?? discount,
+      nextParts.tax ?? tax,
+      nextParts.tip ?? tip,
+    ).toFixed(2));
+  };
 
   const handleUpdateItem = (index: number, field: keyof ReceiptLineItem, value: string) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
+
+    if (field === 'price') {
+      const nextSubtotal = newItems.reduce((sum, item) => sum + toAmount(item.price), 0).toFixed(2);
+      setSubtotal(nextSubtotal);
+      setTotal(calculateTotal(nextSubtotal).toFixed(2));
+    }
   };
 
   const handleAddItem = () => {
@@ -148,28 +175,28 @@ export default function ReviewReceiptStep({ receiptImage, receiptData, setReceip
                     <span className="flex items-center gap-1">Subtotal <MSIcon name="edit" style={{ fontSize: 14 }} className="text-gray-400" /></span>
                     <div className="flex items-center justify-end">
                       <span className="text-gray-500">$</span>
-                      <input type="number" value={subtotal} onChange={e => setSubtotal(e.target.value)} className="w-20 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
+                      <input type="number" value={subtotal} onChange={e => updateTotalPart(setSubtotal, e.target.value, { subtotal: e.target.value })} className="w-20 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-green-600">
                     <span className="flex items-center gap-1">Discount <MSIcon name="edit" style={{ fontSize: 14 }} className="text-green-400" /></span>
                     <div className="flex items-center justify-end">
                       <span className="text-green-500">-$</span>
-                      <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-green-600" />
+                      <input type="number" value={discount} onChange={e => updateTotalPart(setDiscount, e.target.value, { discount: e.target.value })} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-green-600" />
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span className="flex items-center gap-1">Tax & Fees <MSIcon name="edit" style={{ fontSize: 14 }} className="text-gray-400" /></span>
                     <div className="flex items-center justify-end">
                       <span className="text-gray-500">$</span>
-                      <input type="number" value={tax} onChange={e => setTax(e.target.value)} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
+                      <input type="number" value={tax} onChange={e => updateTotalPart(setTax, e.target.value, { tax: e.target.value })} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span className="flex items-center gap-1">Tip <MSIcon name="edit" style={{ fontSize: 14 }} className="text-gray-400" /></span>
                     <div className="flex items-center justify-end">
                       <span className="text-gray-500">$</span>
-                      <input type="number" value={tip} onChange={e => setTip(e.target.value)} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
+                      <input type="number" value={tip} onChange={e => updateTotalPart(setTip, e.target.value, { tip: e.target.value })} className="w-16 text-right border-none bg-transparent focus:ring-0 p-0 font-medium text-gray-900" />
                     </div>
                   </div>
                   <div className="flex justify-between items-center font-bold text-2xl text-gray-900 pt-2 border-t border-gray-200">

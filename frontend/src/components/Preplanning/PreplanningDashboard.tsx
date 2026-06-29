@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import MSIcon from '../MSIcon';
 import LoadingState from '../ui/LoadingState';
 import ErrorState from '../ui/ErrorState';
@@ -5,7 +6,9 @@ import { usePlans } from '../../features/preplanning/api';
 import type { PlanNavigationProps } from '../../types/ui';
 
 export default function PreplanningDashboard({ onNavigate }: PlanNavigationProps) {
-  const plansQuery = usePlans();
+  const [status, setStatus] = useState<'active' | 'draft' | 'completed'>('active');
+  const [search, setSearch] = useState('');
+  const plansQuery = usePlans(true, { status, search });
 
   if (plansQuery.isPending) {
     return <LoadingState label="Loading plans..." />;
@@ -39,11 +42,14 @@ export default function PreplanningDashboard({ onNavigate }: PlanNavigationProps
           </p>
         </div>
         <div className="flex bg-gray-200/60 p-1 rounded-xl">
-          <button className="px-4 py-1.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm">Active</button>
-          <button className="px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-900">Drafts</button>
-          <button className="px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-900">Completed</button>
+          {(['active', 'draft', 'completed'] as const).map(item => (
+            <button key={item} onClick={() => setStatus(item)} className={`px-4 py-1.5 rounded-lg text-sm font-bold capitalize ${status === item ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
+              {item === 'draft' ? 'Drafts' : item}
+            </button>
+          ))}
         </div>
       </div>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search plans" className="h-11 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 outline-none focus:border-[#007A64]" />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

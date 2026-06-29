@@ -52,19 +52,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get("sub")
         user_id: int = payload.get("user_id")
-        name: str = payload.get("name")
-        avatar_url: str = payload.get("avatar_url")
         if email is None or user_id is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    # Construct an in-memory user object directly from the JWT payload
-    user = models.User(
-        id=user_id,
-        email=email,
-        name=name,
-        avatar_url=avatar_url,
-        created_at=datetime.now(timezone.utc)
-    )
+
+    user = await db.get(models.User, user_id)
+    if not user or user.email != email:
+        raise credentials_exception
     return user

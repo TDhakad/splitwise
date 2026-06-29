@@ -66,7 +66,7 @@ export default function SplitEditor({
                   disabled={splitMethod === 'Equally'}
                   onChange={(e) => onSplitChange(p.user_id, e.target.value)}
                 />
-                {splitMethod === 'Shares' && <span className="text-gray-400">%</span>}
+                {splitMethod === 'Shares' && <span className="text-gray-400">part{parseFloat(splits?.[p.user_id] || '0') === 1 ? '' : 's'}</span>}
               </div>
             </div>
           );
@@ -78,7 +78,7 @@ export default function SplitEditor({
           <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Total Accounted For</span>
           <span className={clsx("font-bold text-sm", isPerfectSplit ? "text-[#007A64]" : "text-[#D93F3C]")}>
             {splitMethod === 'Shares'
-              ? `${totalAccounted.toFixed(1)}% / 100.0%`
+              ? `${totalAccounted.toFixed(1)} total share${totalAccounted === 1 ? '' : 's'}`
               : `$${totalAccounted.toFixed(2)} / $${parsedAmount.toFixed(2)}`
             }
           </span>
@@ -89,7 +89,7 @@ export default function SplitEditor({
             style={{
               width: `${Math.min(
                 splitMethod === 'Shares'
-                  ? totalAccounted
+                  ? (totalAccounted > 0 ? 100 : 0)
                   : (totalAccounted / (parsedAmount || 1)) * 100,
                 100
               )}%`
@@ -99,7 +99,7 @@ export default function SplitEditor({
         {!isPerfectSplit && (
           <div className="text-right text-[#D93F3C] font-bold text-xs">
             {splitMethod === 'Shares'
-              ? `${Math.abs(totalAccounted - 100).toFixed(1)}% remaining`
+              ? 'Enter at least one share'
               : `$${Math.abs(totalAccounted - parsedAmount).toFixed(2)} remaining`}
           </div>
         )}

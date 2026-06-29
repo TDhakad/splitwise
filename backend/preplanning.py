@@ -7,7 +7,7 @@ from . import models, schemas
 from .auth import get_current_user
 from .database import get_db
 from .datetime_utils import as_naive_utc
-from .dependencies import require_plan_owner, validate_user_group_ids
+from .dependencies import bounded_limit, require_plan_owner, validate_user_group_ids
 
 router = APIRouter(prefix="/preplanning", tags=["preplanning"])
 
@@ -31,7 +31,7 @@ async def compute_plan_spent(db: AsyncSession, plan: models.Plan) -> dict:
             joinedload(models.Expense.creator),
             joinedload(models.Expense.group),
         )
-        .where(or_(*filters))
+        .where(or_(*filters), models.Expense.is_deleted == False)
     )
     expenses = expenses_result.scalars().unique().all()
 
@@ -78,13 +78,31 @@ async def get_plan_with_details(db: AsyncSession, plan_id: int) -> models.Plan |
 
 @router.get("/plans", response_model=list[schemas.Plan])
 async def list_plans(
+    skip: int = 0,
+    limit: int = Depends(bounded_limit),
+    status: str | None = None,
+    type: str | None = None,
+    group_id: int | None = None,
+    search: str | None = None,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    filters = [models.Plan.user_id == current_user.id]
+    if status:
+        filters.append(models.Plan.status == status)
+    if type:
+        filters.append(models.Plan.type == type)
+    if group_id is not None:
+        filters.append(models.Plan.group_id == group_id)
+    if search:
+        filters.append(models.Plan.name.ilike(f"%{search}%"))
+
     plans_result = await db.execute(
         select(models.Plan)
         .options(selectinload(models.Plan.groups))
-        .where(models.Plan.user_id == current_user.id)
+        .where(*filters)
+        .offset(skip)
+        .limit(limit)
     )
 
     result = []

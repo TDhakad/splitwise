@@ -11,7 +11,7 @@ import SplitOptionsStep from './AddExpense/SplitOptionsStep';
 import { apiFetch, getErrorMessage } from '../lib/constants';
 import { useCreateExpense } from '../features/expenses/api';
 import { usePlans } from '../features/preplanning/api';
-import { buildExpenseParticipants, calculateSplitPreview, getSplitValidation, parseAmount } from '../features/expenses/splitUtils';
+import { buildExpenseParticipants, calculateSplitPreview, getSplitValidation, parseAmount, roundPreviewToTotal } from '../features/expenses/splitUtils';
 import type { ChangeEvent } from 'react';
 import type { ExpenseCreate, ExpenseParticipantBase, GroupDetail, Plan, ReceiptBreakdown, User } from '../types/api';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -53,9 +53,17 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   const total = parseAmount(amount);
   const activeIds = expenseUsers.filter(u => involvedUsers[u.id]).map(u => u.id);
   const preview = calculateSplitPreview(splitMethod, total, activeIds, customValues);
+  const roundedPreview = roundPreviewToTotal(activeIds, total, preview);
   const runningSum = Object.values(preview).reduce((sum, value) => sum + value, 0);
   const pctSum = splitMethod === 'percentage' ? activeIds.reduce((sum, id) => sum + parseAmount(customValues[id]), 0) : null;
-  const validationMsg = getSplitValidation(splitMethod, total, activeIds, runningSum, pctSum);
+  const validationMsg = getSplitValidation(splitMethod, total, activeIds, runningSum, pctSum, customValues);
+  const saveBlockReason = !description.trim()
+    ? 'Add a description before saving.'
+    : total <= 0
+      ? 'Enter an amount greater than $0.00.'
+      : activeIds.length === 0
+        ? 'Select at least one person to split with.'
+        : validationMsg;
   const canSave = Boolean(description.trim() && total > 0 && activeIds.length > 0 && !validationMsg);
   
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -158,7 +166,7 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
   }
 
   if (step === 'itemized-split' && receiptData) {
-    return <ItemizedSplitStep receiptData={receiptData} users={expenseUsers} involvedUsers={involvedUsers} currentUserId={currentUserId} payerId={payerId} onSave={handleFinishItemizedSplit} onClose={onClose} onBack={() => setStep('review-receipt')} />;
+    return <ItemizedSplitStep receiptData={receiptData} setReceiptData={setReceiptData} users={expenseUsers} involvedUsers={involvedUsers} currentUserId={currentUserId} payerId={payerId} onSave={handleFinishItemizedSplit} onClose={onClose} onBack={() => setStep('review-receipt')} />;
   }
 
   const handleBackOrClose = () => {
@@ -199,7 +207,8 @@ export default function AddExpenseFlow({ users, groups, currentUserId, groupCtx,
                 payerId={payerId}
                 groupId={groupId ? parseInt(groupId) : null}
                 planId={planId ? parseInt(planId) : null}
-                splitPreview={preview}
+                splitPreview={roundedPreview}
+                saveBlockReason={saveBlockReason}
                 isProcessingReceipt={isProcessingReceipt}
                 onDescriptionChange={setDescription}
                 onAmountChange={setAmount}

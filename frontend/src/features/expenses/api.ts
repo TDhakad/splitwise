@@ -7,14 +7,33 @@ import type { AuditLog, Expense, ExpenseCreate, ExpenseWithCreator } from '../..
 
 export const expensesKeys = {
   all: ['expenses'] as const,
-  user: (userId: number | undefined) => ['expenses', 'user', userId] as const,
+  user: (userId: number | undefined, filters?: ExpenseFilters) => ['expenses', 'user', userId, filters ?? {}] as const,
   audit: (expenseId: number | undefined) => ['expenses', 'audit', expenseId] as const,
 };
 
-export function useUserExpenses(userId: number | undefined) {
+export interface ExpenseFilters {
+  start_date?: string;
+  end_date?: string;
+  category?: string;
+  group_id?: number;
+  plan_id?: number;
+  search?: string;
+  include_deleted?: boolean;
+}
+
+function toQueryString(params: object) {
+  const search = new URLSearchParams();
+  Object.entries(params as Record<string, string | number | boolean | undefined>).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+export function useUserExpenses(userId: number | undefined, filters: ExpenseFilters = {}) {
   return useQuery<ExpenseWithCreator[], ApiError>({
-    queryKey: expensesKeys.user(userId),
-    queryFn: () => apiJson<ExpenseWithCreator[]>(`/users/${userId}/expenses`),
+    queryKey: expensesKeys.user(userId, filters),
+    queryFn: () => apiJson<ExpenseWithCreator[]>(`/users/${userId}/expenses${toQueryString(filters)}`),
     enabled: Boolean(userId),
     staleTime: 15_000,
   });

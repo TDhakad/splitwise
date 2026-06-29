@@ -6,13 +6,28 @@ import type { Settlement, SettlementCreate } from '../../types/api';
 
 export const settlementsKeys = {
   all: ['settlements'] as const,
-  user: (userId: number | undefined) => ['settlements', 'user', userId] as const,
+  user: (userId: number | undefined, filters?: SettlementFilters) => ['settlements', 'user', userId, filters ?? {}] as const,
 };
 
-export function useUserSettlements(userId: number | undefined) {
+export interface SettlementFilters {
+  start_date?: string;
+  end_date?: string;
+  group_id?: number;
+}
+
+function toQueryString(params: object) {
+  const search = new URLSearchParams();
+  Object.entries(params as Record<string, string | number | boolean | undefined>).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+export function useUserSettlements(userId: number | undefined, filters: SettlementFilters = {}) {
   return useQuery<Settlement[], ApiError>({
-    queryKey: settlementsKeys.user(userId),
-    queryFn: () => apiJson<Settlement[]>(`/users/${userId}/settlements`),
+    queryKey: settlementsKeys.user(userId, filters),
+    queryFn: () => apiJson<Settlement[]>(`/users/${userId}/settlements${toQueryString(filters)}`),
     enabled: Boolean(userId),
     staleTime: 15_000,
   });

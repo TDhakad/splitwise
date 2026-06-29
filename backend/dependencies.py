@@ -24,7 +24,7 @@ async def require_group_member(db: AsyncSession, group_id: int, user_id: int) ->
 
 async def require_group_manager(db: AsyncSession, group_id: int, user_id: int) -> models.Group:
     group = await get_group_with_members(db, group_id)
-    if not group or user_id not in {member.user_id for member in group.members}:
+    if not group or group.created_by != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to manage this group")
     return group
 

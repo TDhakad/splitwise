@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import MSIcon from '../MSIcon';
 import { avatarColor, initials } from '../../lib/utils';
-import { getSplitText, toNumber } from './itemizedSplitUtils';
+import { getSplitText } from './itemizedSplitUtils';
 import type { User } from '../../types/api';
 import type { NumberById, ReceiptLineItem } from '../../types/ui';
 
@@ -14,6 +14,7 @@ interface ReceiptItemsPanelProps {
   onSetAllForMe: () => void;
   onToggleUser: (itemIndex: number, userId: number) => void;
   onEditItem: (itemIndex: number) => void;
+  onUpdateItemPrice: (itemIndex: number, price: string) => void;
   onAddMember: () => void;
 }
 
@@ -26,6 +27,7 @@ export default function ReceiptItemsPanel({
   onSetAllForMe,
   onToggleUser,
   onEditItem,
+  onUpdateItemPrice,
   onAddMember,
 }: ReceiptItemsPanelProps) {
   return (
@@ -56,7 +58,17 @@ export default function ReceiptItemsPanel({
             <div key={idx} className="p-6 hover:bg-gray-50/50 transition-colors group">
               <div className="flex justify-between items-start mb-4">
                 <div className="font-medium text-gray-900">{item.name}</div>
-                <div className="font-medium text-gray-900">${toNumber(item.price).toFixed(2)}</div>
+                <div className="flex items-center justify-end">
+                  <span className="text-gray-500 font-medium">$</span>
+                  <input
+                    type="number"
+                    value={item.price}
+                    onChange={(e) => onUpdateItemPrice(idx, e.target.value)}
+                    className="w-20 font-medium text-gray-900 border-none p-0 text-right focus:ring-0 bg-transparent"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 mb-4">

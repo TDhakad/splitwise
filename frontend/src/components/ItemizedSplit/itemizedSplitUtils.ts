@@ -95,10 +95,30 @@ export function buildReceiptParticipants(
   receiptTotal: number,
   memberTotals: Record<number, MemberTotal>,
 ): ExpenseParticipantBase[] {
+  const totalCents = Math.round(receiptTotal * 100);
+  const rawCents = activeUsers.map(user => ({ userId: user.id, cents: memberTotals[user.id].total * 100 }));
+  const rounded = rawCents.map(({ userId, cents }) => ({ userId, cents: Math.floor(cents) }));
+  let remaining = totalCents - rounded.reduce((sum, item) => sum + item.cents, 0);
+
+  rawCents
+    .map(({ userId, cents }) => ({ userId, fraction: cents - Math.floor(cents) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .forEach(({ userId }) => {
+      if (remaining <= 0) return;
+      const item = rounded.find(entry => entry.userId === userId);
+      if (item) item.cents += 1;
+      remaining -= 1;
+    });
+
+  const roundedById = rounded.reduce<Record<number, number>>((acc, item) => {
+    acc[item.userId] = item.cents / 100;
+    return acc;
+  }, {});
+
   return activeUsers.map(u => ({
     user_id: u.id,
     amount_paid: u.id === payerId ? receiptTotal : 0,
-    amount_owed: memberTotals[u.id].total,
+    amount_owed: roundedById[u.id] ?? 0,
   }));
 }
 

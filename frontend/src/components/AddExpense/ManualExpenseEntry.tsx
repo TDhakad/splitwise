@@ -18,6 +18,7 @@ interface AddExpenseFormProps {
   groupId: number | null;
   planId: number | null;
   splitPreview: NumberById;
+  saveBlockReason: string;
   isProcessingReceipt: boolean;
   onDescriptionChange: (value: string) => void;
   onAmountChange: (value: string) => void;
@@ -42,17 +43,16 @@ export default function AddExpenseForm({
   groupId,
   planId,
   splitPreview,
+  saveBlockReason,
   isProcessingReceipt,
   onDescriptionChange,
   onAmountChange,
-  onPayerChange,
   onGroupChange,
   onPlanChange,
   onSelectFriends,
   onSelectSplit,
   onFileUpload,
 }: AddExpenseFormProps) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const payer = users.find(u => u.id === payerId) || { name: 'Someone' };
   const [isGroupOpen, setIsGroupOpen] = useState(false);
   const [isPlanOpen, setIsPlanOpen] = useState(false);
@@ -243,6 +243,12 @@ export default function AddExpenseForm({
             Edit Split
           </button>
         </div>
+        {saveBlockReason && (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm font-medium text-red-700">
+            <MSIcon name="error_outline" className="text-red-500 shrink-0 mt-0.5" style={{ fontSize: 18 }} />
+            <span>{saveBlockReason}</span>
+          </div>
+        )}
         
         <div className="bg-white border border-gray-200 shadow-sm rounded-xl overflow-hidden">
           {/* Payee Selection / Payer info */}
@@ -270,7 +276,7 @@ export default function AddExpenseForm({
                     </div>
                     <span className="text-gray-900 font-medium text-sm">{isMe ? 'You' : u.name}</span>
                   </div>
-                  <span className="text-gray-700 font-medium">${splitPreview[id] || '0.00'}</span>
+                  <span className="text-gray-700 font-medium tabular-nums">${(splitPreview[id] || 0).toFixed(2)}</span>
                 </div>
               );
             })}
@@ -280,4 +286,3 @@ export default function AddExpenseForm({
     </div>
   );
 }
-

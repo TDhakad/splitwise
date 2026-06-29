@@ -7,7 +7,7 @@ import SplitEditor from './EditExpense/SplitEditor';
 import { avatarColor, initials } from '../lib/utils';
 import { useUpdateExpense } from '../features/expenses/api';
 import { usePlans } from '../features/preplanning/api';
-import { buildEqualSplits, parseAmount } from '../features/expenses/splitUtils';
+import { buildEqualSplits, parseAmount, roundPreviewToTotal } from '../features/expenses/splitUtils';
 import type { EditSplitMethod } from './EditExpense/SplitEditor';
 import type { ExpenseCategory, ExpenseCreate, ExpenseWithCreator, User } from '../types/api';
 import type { StringById } from '../types/ui';
@@ -88,12 +88,21 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
 
   const handleSave = async () => {
     const parsedAmount = parseAmount(amount);
+    const totalShares = splitMethod === 'Shares'
+      ? Object.values(splits || {}).reduce((sum, val) => sum + parseAmount(val), 0)
+      : 0;
+    const participantIds = (expense.participants || []).map(p => p.user_id);
+    const previewAmounts = (expense.participants || []).reduce<Record<number, number>>((acc, p) => {
+      acc[p.user_id] = splitMethod === 'Shares'
+        ? (parseAmount(splits[p.user_id]) / totalShares) * parsedAmount
+        : parseAmount(splits[p.user_id]);
+      return acc;
+    }, {});
+    const roundedAmounts = roundPreviewToTotal(participantIds, parsedAmount, previewAmounts);
     const participants = (expense.participants || []).map(p => ({
       user_id: p.user_id,
       amount_paid: p.user_id === payerId ? parsedAmount : 0,
-      amount_owed: splitMethod === 'Shares'
-        ? (parseAmount(splits[p.user_id]) / 100) * parsedAmount
-        : parseAmount(splits[p.user_id])
+      amount_owed: roundedAmounts[p.user_id] ?? 0
     }));
 
     const payload: ExpenseCreate = {
@@ -120,7 +129,7 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
   const totalAccounted = Object.values(splits || {}).reduce((sum, val) => sum + parseAmount(val), 0);
   const parsedAmount = parseAmount(amount);
   const isPerfectSplit = splitMethod === 'Shares'
-    ? Math.abs(totalAccounted - 100) < 0.1
+    ? totalAccounted > 0
     : Math.abs(totalAccounted - parsedAmount) < 0.01;
   const categoryOptions = [
     { value: 'Entertainment', label: 'Entertainment', icon: 'local_bar' },
@@ -205,7 +214,7 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
                   </div>
                   <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex items-center gap-4 relative z-20">
                     <MSIcon name="category" className="text-gray-400 text-xl shrink-0" />
-                    <div className="flex flex-col flex-1 w-full overflow-hidden">
+                    <div className="flex flex-col flex-1 w-full">
                       <label className="block text-[10px] font-bold tracking-widest uppercase text-gray-500 mb-0.5">Category</label>
                       <CustomDropdown
                         value={category}
@@ -229,65 +238,65 @@ export default function EditExpenseModal({ expense, users, currentUserId, onClos
 
                 {/* Paid By & Linked Plan */}
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex items-center gap-4">
-                     <MSIcon name="account_balance_wallet" className="text-gray-400 text-xl shrink-0" />
-                     <div className="flex items-center justify-between flex-1 relative z-10">
-                       <label className="block text-[14px] font-medium text-gray-600">Paid by</label>
-                       <div className="relative">
-                          <CustomDropdown
-                            value={payerId}
-                            onChange={(val) => setPayerId(Number(val))}
-                            options={(expense.participants || []).map(p => ({ value: p.user_id }))}
-                            className="rounded-full py-1.5 px-3 bg-gray-50 border border-gray-200 shadow-sm text-gray-900"
-                            renderSelected={(opt) => {
-                              const u = users.find(usr => usr.id === opt.value);
-                              return (
-                                <div className="flex items-center gap-2">
-                                  <div className={clsx("w-5 h-5 rounded-full flex items-center justify-center font-bold text-white text-[9px]", avatarColor(opt.value))}>
-                                    {initials(u?.name || 'U')}
-                                  </div>
-                                  <span className="font-bold text-gray-900 text-xs truncate max-w-[80px]">{u?.id === currentUserId ? 'You' : u?.name}</span>
-                                </div>
-                              );
-                            }}
-                            renderOption={(opt, isSelected) => {
-                              const u = users.find(usr => usr.id === opt.value);
-                              return (
-                                <>
-                                  <div className={clsx("w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-[10px]", avatarColor(opt.value))}>
-                                    {initials(u?.name || 'U')}
-                                  </div>
-                                  <span className="flex-1 font-medium text-sm ml-3 truncate text-gray-900">{u?.id === currentUserId ? `${u?.name} (You)` : u?.name}</span>
-                                  {isSelected && <MSIcon name="check" className="text-[#007A64] text-sm shrink-0" />}
-                                </>
-                              );
-                            }}
-                          />
-                       </div>
-                     </div>
-                  </div>
+                  <CustomDropdown
+                    value={payerId}
+                    onChange={(val) => setPayerId(Number(val))}
+                    options={(expense.participants || []).map(p => ({ value: p.user_id }))}
+                    className="flex-1"
+                    triggerClassName="!p-4 !rounded-2xl !bg-white !border-gray-200 !shadow-sm !ring-0 hover:!bg-white"
+                    renderSelected={(opt) => {
+                      const u = users.find(usr => usr.id === opt.value);
+                      return (
+                        <div className="flex items-center justify-between flex-1 min-w-0">
+                          <div className="flex items-center gap-4 min-w-0">
+                            <MSIcon name="account_balance_wallet" className="text-gray-400 text-xl shrink-0" />
+                            <span className="block text-[14px] font-medium text-gray-600">Paid by</span>
+                          </div>
+                          <div className="flex items-center gap-2 pl-3 shrink-0">
+                            <div className={clsx("w-5 h-5 rounded-full flex items-center justify-center font-bold text-white text-[9px]", avatarColor(opt.value))}>
+                              {initials(u?.name || 'U')}
+                            </div>
+                            <span className="font-bold text-gray-900 text-xs truncate max-w-[100px]">{u?.id === currentUserId ? 'You' : u?.name}</span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                    renderOption={(opt, isSelected) => {
+                      const u = users.find(usr => usr.id === opt.value);
+                      return (
+                        <>
+                          <div className={clsx("w-6 h-6 rounded-full flex items-center justify-center font-bold text-white text-[10px]", avatarColor(opt.value))}>
+                            {initials(u?.name || 'U')}
+                          </div>
+                          <span className="flex-1 font-medium text-sm ml-3 truncate text-gray-900">{u?.id === currentUserId ? `${u?.name} (You)` : u?.name}</span>
+                          {isSelected && <MSIcon name="check" className="text-[#007A64] text-sm shrink-0" />}
+                        </>
+                      );
+                    }}
+                  />
 
-                  <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex items-center gap-4">
-                     <MSIcon name="event_note" className="text-gray-400 text-xl shrink-0" />
-                     <div className="flex items-center justify-between flex-1 relative z-10">
-                       <label className="block text-[14px] font-medium text-gray-600">Linked Plan</label>
-                       <div className="relative">
-                          <CustomDropdown
-                            value={planId}
-                            onChange={(val) => setPlanId(val)}
-                            options={[{ value: '', label: 'None' }, ...plans.map(p => ({ value: p.id, label: p.name }))]}
-                            className="rounded-full py-1.5 px-3 bg-gray-50 border border-gray-200 shadow-sm text-gray-900"
-                            renderSelected={(opt) => <span className="font-bold text-gray-900 text-xs truncate max-w-[80px]">{opt.label}</span>}
-                            renderOption={(opt, isSelected) => (
-                              <>
-                                <span className="flex-1 font-medium text-sm truncate text-gray-900">{opt.label}</span>
-                                {isSelected && <MSIcon name="check" className="text-[#007A64] text-sm shrink-0" />}
-                              </>
-                            )}
-                          />
-                       </div>
-                     </div>
-                  </div>
+                  <CustomDropdown
+                    value={planId}
+                    onChange={(val) => setPlanId(val)}
+                    options={[{ value: '', label: 'None' }, ...plans.map(p => ({ value: p.id, label: p.name }))]}
+                    className="flex-1"
+                    triggerClassName="!p-4 !rounded-2xl !bg-white !border-gray-200 !shadow-sm !ring-0 hover:!bg-white"
+                    renderSelected={(opt) => (
+                      <div className="flex items-center justify-between flex-1 min-w-0">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <MSIcon name="event_note" className="text-gray-400 text-xl shrink-0" />
+                          <span className="block text-[14px] font-medium text-gray-600">Linked Plan</span>
+                        </div>
+                        <span className="font-bold text-gray-900 text-xs truncate max-w-[120px] pl-3 shrink-0">{opt.label}</span>
+                      </div>
+                    )}
+                    renderOption={(opt, isSelected) => (
+                      <>
+                        <span className="flex-1 font-medium text-sm truncate text-gray-900">{opt.label}</span>
+                        {isSelected && <MSIcon name="check" className="text-[#007A64] text-sm shrink-0" />}
+                      </>
+                    )}
+                  />
                 </div>
               </div>
 

@@ -1,15 +1,18 @@
 import { useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import MSIcon from './MSIcon';
 import EditItemSplitModal from './ItemizedSplit/EditItemSplitModal';
 import ReceiptItemsPanel from './ItemizedSplit/ReceiptItemsPanel';
 import SplitSummaryPanel from './ItemizedSplit/SplitSummaryPanel';
 import SelectFriendsStep from './AddExpense/SelectFriendsStep';
+import { toNumber } from './ItemizedSplit/itemizedSplitUtils';
 import useItemizedSplit from './ItemizedSplit/useItemizedSplit';
 import type { ExpenseParticipantBase, ReceiptBreakdown, User } from '../types/api';
 import type { BooleanById, ReceiptReviewData } from '../types/ui';
 
 interface ItemizedSplitStepProps {
   receiptData: ReceiptReviewData;
+  setReceiptData: Dispatch<SetStateAction<ReceiptReviewData | null>>;
   users: User[];
   involvedUsers: BooleanById;
   currentUserId: number;
@@ -20,10 +23,26 @@ interface ItemizedSplitStepProps {
   onBack: () => void;
 }
 
-export default function ItemizedSplitStep({ receiptData, users, involvedUsers: initialInvolvedUsers, currentUserId, payerId, initialBreakdown, onSave, onClose, onBack }: ItemizedSplitStepProps) {
+export default function ItemizedSplitStep({ receiptData, setReceiptData, users, involvedUsers: initialInvolvedUsers, currentUserId, payerId, initialBreakdown, onSave, onClose, onBack }: ItemizedSplitStepProps) {
   const [involvedUsers, setInvolvedUsers] = useState<BooleanById>(initialInvolvedUsers);
   const [showFriendsPanel, setShowFriendsPanel] = useState(false);
   const split = useItemizedSplit(receiptData, users, involvedUsers, currentUserId, payerId, initialBreakdown);
+
+  const handleUpdateItemPrice = (itemIndex: number, price: string) => {
+    setReceiptData(prev => {
+      if (!prev) return prev;
+      const items = prev.items.map((item, idx) => idx === itemIndex ? { ...item, price } : item);
+      const subtotal = items.reduce((sum, item) => sum + toNumber(item.price), 0);
+      const total = subtotal - toNumber(prev.discount) + toNumber(prev.tax) + toNumber(prev.tip);
+      return {
+        ...prev,
+        items,
+        subtotal: subtotal.toFixed(2),
+        total: total.toFixed(2),
+      };
+    });
+    split.clearCustomSplit(itemIndex);
+  };
 
   const handleFinish = () => {
     onSave(split.buildParticipants(), split.receiptTotal, split.buildBreakdown());
@@ -58,6 +77,7 @@ export default function ItemizedSplitStep({ receiptData, users, involvedUsers: i
                 onSetAllForMe={split.setAllForMe}
                 onToggleUser={split.toggleUserForItem}
                 onEditItem={split.setEditingItemIdx}
+                onUpdateItemPrice={handleUpdateItemPrice}
                 onAddMember={() => setShowFriendsPanel(true)}
               />
             </div>
@@ -70,7 +90,8 @@ export default function ItemizedSplitStep({ receiptData, users, involvedUsers: i
                 assignedSum={split.assignedSum}
                 unassigned={split.unassigned}
                 memberTotals={split.memberTotals}
-                isFullyAssigned={split.isFullyAssigned}
+                canFinish={split.canFinish}
+                itemizedError={split.itemizedError}
                 onFinish={handleFinish}
               />
             </div>

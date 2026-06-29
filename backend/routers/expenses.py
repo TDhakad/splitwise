@@ -3,7 +3,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -12,6 +12,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..datetime_utils import as_naive_utc
 from ..dependencies import bounded_limit, require_group_member
+from ..notifications import create_notification
 from ..services import compute_balances_for_group, compute_balances_for_user, create_audit_log_background, to_cents
 
 router = APIRouter(tags=["expenses", "balances", "settlements"])
@@ -64,6 +65,44 @@ async def require_expense_access(db: AsyncSession, expense: models.Expense, curr
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+async def notify_expense_users(
+    db: AsyncSession,
+    expense: models.Expense,
+    actor: models.User,
+    event_type: str,
+) -> None:
+    for participant in expense.participants:
+        if participant.user_id == actor.id:
+            continue
+        await create_notification(
+            db,
+            participant.user_id,
+            event_type,
+            actor.id,
+            "Expense",
+            expense.id,
+            {"description": expense.description, "amount": expense.total_amount},
+        )
+
+
+async def notify_settlement_user(
+    db: AsyncSession,
+    settlement: models.Settlement,
+    actor: models.User,
+    event_type: str,
+) -> None:
+    target_user_id = settlement.payee_id if actor.id == settlement.payer_id else settlement.payer_id
+    await create_notification(
+        db,
+        target_user_id,
+        event_type,
+        actor.id,
+        "Settlement",
+        settlement.id,
+        {"amount": settlement.amount, "payer_id": settlement.payer_id, "payee_id": settlement.payee_id},
+    )
+
+
 @router.post("/expenses/", response_model=schemas.Expense)
 async def create_expense(
     expense: schemas.ExpenseCreate,
@@ -108,7 +147,10 @@ async def create_expense(
     await db.commit()
     background_tasks.add_task(create_audit_log_background, "Expense", db_expense.id, current_user.id, "CREATE")
 
+    await db.flush()
     reloaded = await get_expense_with_details(db, db_expense.id)
+    await notify_expense_users(db, reloaded, current_user, "expense_created")
+    await db.commit()
     return schemas.Expense.model_validate(reloaded)
 
 
@@ -126,10 +168,10 @@ async def delete_expense(
         raise HTTPException(status_code=400, detail="Expense is already deleted")
 
     await require_expense_access(db, db_expense, current_user.id)
-    group_id = db_expense.group_id
     db_expense.is_deleted = True
     db_expense.deleted_by = current_user.id
     db_expense.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    await notify_expense_users(db, db_expense, current_user, "expense_deleted")
     await db.commit()
     background_tasks.add_task(create_audit_log_background, "Expense", expense_id, current_user.id, "DELETE")
 
@@ -245,9 +287,9 @@ async def update_expense(
     if changes:
         background_tasks.add_task(create_audit_log_background, "Expense", db_expense.id, current_user.id, "UPDATE", json.dumps(changes))
 
-    await db.commit()
-
     reloaded = await get_expense_with_details(db, db_expense.id)
+    await notify_expense_users(db, reloaded, current_user, "expense_updated")
+    await db.commit()
     return schemas.Expense.model_validate(reloaded)
 
 
@@ -262,6 +304,7 @@ async def get_user_balances(
         raise HTTPException(status_code=403, detail="Not authorized to view other users' balances")
 
     if group_id:
+        await require_group_member(db, group_id, current_user.id)
         balances = await compute_balances_for_group(db, group_id)
         return [b for b in balances if b["from_user_id"] == user_id or b["to_user_id"] == user_id]
     
@@ -327,6 +370,8 @@ async def create_settlement(
             status="COMPLETED",
         )
         db.add(db_settlement)
+        await db.flush()
+        await notify_settlement_user(db, db_settlement, current_user, "settlement_created")
         await db.commit()
         await db.refresh(db_settlement)
         background_tasks.add_task(create_audit_log_background, "Settlement", db_settlement.id, current_user.id, "CREATE")
@@ -350,7 +395,6 @@ async def create_settlement(
         )
 
     remaining = settlement.amount
-    groups_to_rebuild = set()
     first_settlement = None
     for balance in filtered_balances:
         if remaining <= 0.01:
@@ -369,6 +413,7 @@ async def create_settlement(
         )
         db.add(sub_settlement)
         await db.flush()
+        await notify_settlement_user(db, sub_settlement, current_user, "settlement_created")
         if first_settlement is None:
             first_settlement = sub_settlement
 
@@ -391,8 +436,30 @@ async def update_settlement(
         raise HTTPException(status_code=404, detail="Settlement not found")
     if current_user.id not in [db_settlement.payer_id, db_settlement.payee_id]:
         raise HTTPException(status_code=403, detail="You can only modify your own settlements.")
-    
+
+    updated_cents = to_cents(settlement_update.amount)
+    if db_settlement.group_id is not None:
+        await require_group_member(db, db_settlement.group_id, current_user.id)
+        balances = await compute_balances_for_group(db, db_settlement.group_id)
+    else:
+        balances = await compute_balances_for_user(db, db_settlement.payer_id)
+
+    balance = next(
+        (
+            b for b in balances
+            if b["from_user_id"] == db_settlement.payer_id and b["to_user_id"] == db_settlement.payee_id
+        ),
+        None,
+    )
+    outstanding_cents = to_cents(balance["amount"] if balance else 0) + to_cents(db_settlement.amount)
+    if updated_cents > outstanding_cents:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Settlement amount cannot exceed the outstanding balance of ${outstanding_cents / 100:.2f}.",
+        )
+
     db_settlement.amount = settlement_update.amount
+    await notify_settlement_user(db, db_settlement, current_user, "settlement_updated")
     await db.commit()
     await db.refresh(db_settlement)
     background_tasks.add_task(create_audit_log_background, "Settlement", db_settlement.id, current_user.id, "UPDATE", f"Amount changed to {settlement_update.amount}")
@@ -411,7 +478,8 @@ async def delete_settlement(
         raise HTTPException(status_code=404, detail="Settlement not found")
     if current_user.id not in [db_settlement.payer_id, db_settlement.payee_id]:
         raise HTTPException(status_code=403, detail="You can only delete your own settlements.")
-    
+
+    await notify_settlement_user(db, db_settlement, current_user, "settlement_deleted")
     await db.delete(db_settlement)
     await db.commit()
     background_tasks.add_task(create_audit_log_background, "Settlement", settlement_id, current_user.id, "DELETE")
@@ -423,11 +491,34 @@ async def get_all_user_expenses(
     user_id: int,
     skip: int = 0,
     limit: int = Depends(bounded_limit),
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
+    category: str | None = None,
+    group_id: int | None = None,
+    plan_id: int | None = None,
+    search: str | None = None,
+    include_deleted: bool = False,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' expenses")
+
+    filters = [or_(models.Expense.created_by == user_id, models.ExpenseParticipant.user_id == user_id)]
+    if not include_deleted:
+        filters.append(models.Expense.is_deleted == False)
+    if start_date is not None:
+        filters.append(models.Expense.date >= as_naive_utc(start_date))
+    if end_date is not None:
+        filters.append(models.Expense.date <= as_naive_utc(end_date))
+    if category:
+        filters.append(models.Expense.category == category)
+    if group_id is not None:
+        filters.append(models.Expense.group_id == group_id)
+    if plan_id is not None:
+        filters.append(models.Expense.plan_id == plan_id)
+    if search:
+        filters.append(models.Expense.description.ilike(f"%{search}%"))
 
     expenses_result = await db.execute(
         select(models.Expense)
@@ -437,7 +528,7 @@ async def get_all_user_expenses(
             joinedload(models.Expense.group),
         )
         .outerjoin(models.ExpenseParticipant)
-        .where(or_(models.Expense.created_by == user_id, models.ExpenseParticipant.user_id == user_id))
+        .where(and_(*filters))
         .order_by(models.Expense.date.desc())
         .offset(skip)
         .limit(limit)
@@ -457,15 +548,26 @@ async def get_all_user_settlements(
     user_id: int,
     skip: int = 0,
     limit: int = Depends(bounded_limit),
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
+    group_id: int | None = None,
     current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view other users' settlements")
 
+    filters = [or_(models.Settlement.payer_id == user_id, models.Settlement.payee_id == user_id)]
+    if start_date is not None:
+        filters.append(models.Settlement.date >= as_naive_utc(start_date))
+    if end_date is not None:
+        filters.append(models.Settlement.date <= as_naive_utc(end_date))
+    if group_id is not None:
+        filters.append(models.Settlement.group_id == group_id)
+
     settlements_result = await db.execute(
         select(models.Settlement)
-        .where(or_(models.Settlement.payer_id == user_id, models.Settlement.payee_id == user_id))
+        .where(and_(*filters))
         .order_by(models.Settlement.date.desc())
         .offset(skip)
         .limit(limit)
@@ -491,6 +593,4 @@ async def get_expense_audit_logs(
         .order_by(models.AuditLog.timestamp.asc())
     )
     return logs_result.scalars().all()
-
-
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -45,7 +45,12 @@ class GroupBase(BaseModel):
     simplify_debts: Optional[bool] = False
 
 class GroupCreate(GroupBase):
-    pass
+    member_ids: List[int] = Field(default_factory=list)
+    member_emails: List[EmailStr] = Field(default_factory=list)
+
+class GroupMemberCreate(BaseModel):
+    user_id: Optional[int] = None
+    email: Optional[EmailStr] = None
 
 class Group(GroupBase):
     id: int
@@ -201,6 +206,46 @@ class FriendshipWithUsers(Friendship):
     addressee: User
     class Config:
         from_attributes = True
+
+# Notifications
+class Notification(BaseModel):
+    id: int
+    user_id: int
+    type: str
+    actor_user_id: Optional[int] = None
+    target_type: str
+    target_id: Optional[int] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class NotificationList(BaseModel):
+    notifications: List[Notification]
+    unread_count: int
+
+# Analytics
+class SpendingMonthlyTotal(BaseModel):
+    month: str
+    amount_cents: int
+
+class SpendingCategoryTotal(BaseModel):
+    category: str
+    amount_cents: int
+
+class SpendingHabits(BaseModel):
+    total_cents: int
+    average_monthly_cents: int
+    transaction_count: int
+    average_transaction_cents: int
+    top_category: Optional[str] = None
+
+class SpendingAnalytics(BaseModel):
+    monthly: List[SpendingMonthlyTotal]
+    categories: List[SpendingCategoryTotal]
+    habits: SpendingHabits
 
 # Preplanning
 class PlanAllocationBase(BaseModel):

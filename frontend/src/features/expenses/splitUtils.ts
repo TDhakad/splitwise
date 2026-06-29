@@ -51,16 +51,40 @@ export function getSplitValidation(
   return '';
 }
 
+export function roundPreviewToTotal(activeIds: number[], total: number, preview: NumberById): NumberById {
+  const totalCents = Math.round(total * 100);
+  const rawCents = activeIds.map(uid => ({ uid, cents: (preview[uid] ?? 0) * 100 }));
+  const rounded = rawCents.map(({ uid, cents }) => ({ uid, cents: Math.floor(cents) }));
+  let remaining = totalCents - rounded.reduce((sum, item) => sum + item.cents, 0);
+
+  rawCents
+    .map(({ uid, cents }) => ({ uid, fraction: cents - Math.floor(cents) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .forEach(({ uid }) => {
+      if (remaining <= 0) return;
+      const item = rounded.find(entry => entry.uid === uid);
+      if (item) item.cents += 1;
+      remaining -= 1;
+    });
+
+  return rounded.reduce<NumberById>((acc, item) => {
+    acc[item.uid] = item.cents / 100;
+    return acc;
+  }, {});
+}
+
 export function buildExpenseParticipants(
   activeIds: number[],
   payerId: number,
   total: number,
   preview: NumberById,
 ): ExpenseParticipantBase[] {
+  const roundedById = roundPreviewToTotal(activeIds, total, preview);
+
   const participants = activeIds.map(uid => ({
     user_id: uid,
     amount_paid: uid === payerId ? total : 0,
-    amount_owed: preview[uid] ?? 0,
+    amount_owed: roundedById[uid] ?? 0,
   }));
 
   if (!activeIds.includes(payerId)) {

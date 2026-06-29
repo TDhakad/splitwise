@@ -20,6 +20,7 @@ export default function CreateGroupModal({ users, currentUserId, onClose, onSave
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<BooleanById>({ [currentUserId]: true });
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const createGroup = useCreateGroup();
@@ -32,7 +33,18 @@ export default function CreateGroupModal({ users, currentUserId, onClose, onSave
   );
 
   const toggleMember = (id: number) => setSelectedMembers(prev => ({ ...prev, [id]: !prev[id] }));
-  const memberCount = Object.values(selectedMembers).filter(Boolean).length;
+  const normalizedQuery = debouncedQuery.trim().toLowerCase();
+  const canAddExactEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedQuery)
+    && !users.some(user => user.email?.toLowerCase() === normalizedQuery)
+    && !selectedEmails.includes(normalizedQuery);
+  const memberCount = Object.values(selectedMembers).filter(Boolean).length + selectedEmails.length;
+
+  const addEmail = () => {
+    const email = query.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || selectedEmails.includes(email)) return;
+    setSelectedEmails(prev => [...prev, email]);
+    setQuery('');
+  };
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Group name is required.'); return; }
@@ -43,6 +55,7 @@ export default function CreateGroupModal({ users, currentUserId, onClose, onSave
         currentUserId,
         payload: { name: name.trim(), description: description.trim() || null },
         memberIds,
+        memberEmails: selectedEmails,
       });
       onSave();
     } catch (e) { setError(getErrorMessage(e)); }
@@ -97,8 +110,20 @@ export default function CreateGroupModal({ users, currentUserId, onClose, onSave
               <div className="relative mb-4">
                 <MSIcon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl" />
                 <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search people…"
+                  onKeyDown={e => { if (e.key === 'Enter' && canAddExactEmail) { e.preventDefault(); addEmail(); } }}
                   className="w-full h-12 bg-gray-100 rounded-xl pl-12 pr-4 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-[#007A64]/50 transition-all" />
               </div>
+
+              {selectedEmails.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedEmails.map(email => (
+                    <button key={email} onClick={() => setSelectedEmails(prev => prev.filter(item => item !== email))} className="flex items-center gap-2 rounded-full bg-[#EAF5F2] px-3 py-1.5 text-xs font-bold text-[#007A64]">
+                      {email}
+                      <MSIcon name="close" className="text-sm" />
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 bg-gray-50">
@@ -133,7 +158,19 @@ export default function CreateGroupModal({ users, currentUserId, onClose, onSave
                   </div>
                 ))}
 
-                {filtered.length === 0 && (
+                {canAddExactEmail && (
+                  <button onClick={addEmail} className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-gray-50 transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-[#EAF5F2] text-[#007A64] flex items-center justify-center">
+                      <MSIcon name="alternate_email" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-gray-900">Add by email</p>
+                      <p className="text-xs text-gray-500">{normalizedQuery}</p>
+                    </div>
+                  </button>
+                )}
+
+                {filtered.length === 0 && !canAddExactEmail && (
                   <div className="px-5 py-8 text-center text-gray-500 text-sm font-medium">No users found</div>
                 )}
               </div>

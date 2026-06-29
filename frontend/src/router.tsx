@@ -106,8 +106,6 @@ declare module '@tanstack/react-router' {
 
 // Wrapper components that extract data from query hooks and pass them as props
 // because the original views expect fully populated props.
-import { useUserExpenses } from './features/expenses/api';
-import { useUserSettlements } from './features/settlements/api';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useLayoutContext } from './components/Layout';
 
@@ -141,20 +139,16 @@ function FriendsViewWrapper() {
 
 function FriendDetailViewWrapper() {
   const { friendId } = useParams({ from: '/friends/$friendId' });
-  const { currentUserId, users, rawBalances, groups, openSettleUpModal } = useLayoutContext();
+  const { currentUserId, users, rawBalances, groups, openSettleUpModal, setSelectedExpenseCtx } = useLayoutContext();
   const navigate = useNavigate();
   if (!currentUserId) return null;
-  return <FriendDetailView friendId={parseInt(friendId)} users={users} rawBalances={rawBalances} groups={groups} currentUserId={currentUserId} onBack={() => navigate({ to: '/friends' })} onSettleUp={openSettleUpModal} />;
+  return <FriendDetailView friendId={parseInt(friendId)} users={users} rawBalances={rawBalances} groups={groups} currentUserId={currentUserId} onBack={() => navigate({ to: '/friends' })} onSettleUp={openSettleUpModal} onOpenGroup={(id) => navigate({ to: '/groups/$groupId', params: { groupId: id.toString() } })} onSelectExpense={(expense, contextName, friendName) => setSelectedExpenseCtx({ expense, from: 'friend', friendName, contextName })} />;
 }
 
 function ActivityViewWrapper() {
   const { currentUserId, users, groups, setSelectedExpenseCtx } = useLayoutContext();
-  const expensesQuery = useUserExpenses(currentUserId ?? undefined);
-  const settlementsQuery = useUserSettlements(currentUserId ?? undefined);
-  const expenses = expensesQuery.data ?? [];
-  const settlements = settlementsQuery.data ?? [];
   if (!currentUserId) return null;
-  return <ActivityView expenses={expenses} settlements={settlements} groups={groups} users={users} currentUserId={currentUserId} onSelectExpense={(exp) => setSelectedExpenseCtx({ expense: exp, from: 'activity' })} />;
+  return <ActivityView groups={groups} users={users} currentUserId={currentUserId} onSelectExpense={(exp) => setSelectedExpenseCtx({ expense: exp, from: 'activity' })} />;
 }
 
 function PreplanningHubWrapper() {

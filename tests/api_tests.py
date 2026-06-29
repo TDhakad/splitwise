@@ -244,6 +244,91 @@ async def test_groups_list_includes_members(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_group_create_by_email_adds_member_and_auto_friends(client: AsyncClient):
+    headers = await auth_headers(client)
+    await client.post(
+        "/auth/register",
+        json={"email": "blair@example.com", "name": "Blair User", "password": "password123"},
+    )
+
+    create_response = await client.post(
+        "/groups/",
+        headers=headers,
+        json={"name": "Trip", "member_emails": ["blair@example.com"]},
+    )
+    assert create_response.status_code == 200, create_response.text
+    members = create_response.json()["members"]
+    assert {member["email"] for member in members} == {"alex@example.com", "blair@example.com"}
+
+    friends_response = await client.get("/users/", headers=headers)
+    assert friends_response.status_code == 200, friends_response.text
+    assert [friend["email"] for friend in friends_response.json()] == ["blair@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_notifications_are_persisted_and_can_be_read(client: AsyncClient):
+    alex_headers = await auth_headers(client)
+    blair_headers = await auth_headers(client, "blair@example.com")
+
+    request_response = await client.post(
+        "/friends/request",
+        headers=alex_headers,
+        json={"email": "blair@example.com"},
+    )
+    assert request_response.status_code == 200, request_response.text
+
+    notifications_response = await client.get("/notifications/", headers=blair_headers)
+    assert notifications_response.status_code == 200, notifications_response.text
+    notifications = notifications_response.json()
+    assert notifications["unread_count"] == 1
+    assert notifications["notifications"][0]["type"] == "friend_request"
+
+    read_response = await client.post(
+        f"/notifications/{notifications['notifications'][0]['id']}/read",
+        headers=blair_headers,
+    )
+    assert read_response.status_code == 200, read_response.text
+
+    notifications_response = await client.get("/notifications/", headers=blair_headers)
+    assert notifications_response.json()["unread_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_spending_analytics_uses_user_share_and_excludes_deleted(client: AsyncClient):
+    headers = await auth_headers(client)
+
+    response = await client.post(
+        "/expenses/",
+        headers=headers,
+        json={
+            "description": "Coffee",
+            "total_amount": 10,
+            "currency": "USD",
+            "date": "2026-06-20T00:00:00Z",
+            "category": "Dining",
+            "participants": [
+                {"user_id": 1, "amount_paid": 10, "amount_owed": 10},
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    analytics_response = await client.get("/analytics/spending", headers=headers)
+    assert analytics_response.status_code == 200, analytics_response.text
+    analytics = analytics_response.json()
+    assert analytics["habits"]["total_cents"] == 1000
+    assert analytics["monthly"] == [{"month": "2026-06", "amount_cents": 1000}]
+    assert analytics["categories"] == [{"category": "Dining", "amount_cents": 1000}]
+
+    delete_response = await client.delete(f"/expenses/{response.json()['id']}", headers=headers)
+    assert delete_response.status_code == 204, delete_response.text
+
+    analytics_response = await client.get("/analytics/spending", headers=headers)
+    assert analytics_response.status_code == 200, analytics_response.text
+    assert analytics_response.json()["habits"]["total_cents"] == 0
+
+
+@pytest.mark.asyncio
 async def test_group_expense_rebuilds_non_simplified_balances(client: AsyncClient):
     headers = await auth_headers(client)
     await client.post(

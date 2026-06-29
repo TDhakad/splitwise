@@ -22,6 +22,7 @@ interface ExpenseDetailViewProps {
 export default function ExpenseDetailView({ expense, context, users, currentUserId, onBack, onEdit, onDeleted }: ExpenseDetailViewProps) {
    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
    const [showReceiptSplitEditor, setShowReceiptSplitEditor] = useState(false);
+   const [receiptEditorData, setReceiptEditorData] = useState<ReceiptReviewData | null>(null);
    const auditQuery = useExpenseAudit(expense?.id);
    const updateExpense = useUpdateExpense();
    const auditLogs = auditQuery.data ?? [];
@@ -39,6 +40,10 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
       const groupName = context.groupName ?? 'Group';
       breadcrumbs = ['Groups', groupName, expense.description];
       backText = `Back to ${groupName}`;
+   } else if (context?.from === 'friend') {
+      const friendName = context.friendName ?? 'Friend';
+      breadcrumbs = ['Friends', friendName, context.contextName ?? 'Ledger', expense.description];
+      backText = `Back to ${friendName}`;
    } else if (context?.from === 'preplanning') {
       breadcrumbs = ['Plans', context.planName || 'Plan Detail', expense.description];
       backText = "Back to Plan";
@@ -56,6 +61,11 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
    const receiptData = expense.receipt_breakdown ? receiptBreakdownToReviewData(expense.receipt_breakdown) : null;
    const involvedUsers = expense.receipt_breakdown ? receiptBreakdownToInvolvedUsers(expense.receipt_breakdown) : {};
 
+   const openReceiptSplitEditor = () => {
+      setReceiptEditorData(receiptData);
+      setShowReceiptSplitEditor(true);
+   };
+
    const handleSaveReceiptSplit = async (participants: ExpenseParticipantBase[], finalTotal: number, receiptBreakdown: ReceiptBreakdown) => {
       const payload: ExpenseCreate = {
          group_id: expense.group_id,
@@ -72,6 +82,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
 
       await updateExpense.mutateAsync({ expenseId: expense.id, currentUserId, payload });
       setShowReceiptSplitEditor(false);
+      setReceiptEditorData(null);
    };
 
    return (
@@ -217,7 +228,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                      breakdown={expense.receipt_breakdown}
                      users={users}
                      currentUserId={currentUserId}
-                     onEdit={expense.is_deleted ? undefined : () => setShowReceiptSplitEditor(true)}
+                     onEdit={expense.is_deleted ? undefined : openReceiptSplitEditor}
                   />
                )}
             </div>
@@ -264,7 +275,7 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                            if (log.action === 'CREATE') actionStr = 'created this expense';
                            else if (log.action === 'DELETE') actionStr = 'deleted this expense';
                            
-                           type AuditChange = { type: 'field'; field: string; old: any; new: any } | { type: 'split'; user_id: number; field: 'amount_owed' | 'amount_paid'; old: number; new: number };
+                           type AuditChange = { type: 'field'; field: string; old: unknown; new: unknown } | { type: 'split'; user_id: number; field: 'amount_owed' | 'amount_paid'; old: number; new: number };
                            let parsedChanges: AuditChange[] = [];
                            try {
                               if (log.changes) {
@@ -273,46 +284,43 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                                     parsedChanges = parsed as AuditChange[];
                                  }
                               }
-                           } catch (_e) {
-                              // Ignore older JSON dumps
+                           } catch {
+                              parsedChanges = [];
                            }
+                           const visibleChanges = parsedChanges.filter(change => change.type !== 'field' || change.field !== 'date');
+                           const changeTimestamp = new Date(log.timestamp).toLocaleString();
+                           if (log.action === 'UPDATE' && parsedChanges.length > 0 && visibleChanges.length === 0) {
+                              return null;
+                           }
+                           const updateSummary = visibleChanges.map(change => {
+                              if (change.type === 'field') {
+                                 const fieldName = change.field.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+                                 const isMoney = change.field === 'total_amount';
+                                 const newVal = isMoney ? `$${Number(change.new).toFixed(2)}` : String(change.new || 'None');
+                                 return `${fieldName} to ${newVal}`;
+                              }
+
+                              const splitUser = users.find(usr => usr.id === change.user_id) || { id: -1, name: 'Someone' };
+                              const splitName = splitUser.id === currentUserId ? 'You' : splitUser.name;
+                              const fieldName = change.field === 'amount_owed' ? 'owed amount' : 'paid amount';
+                              return `${splitName}'s ${fieldName} to $${Number(change.new).toFixed(2)}`;
+                           }).join(', ');
+                           const isUpdateWithSummary = log.action === 'UPDATE' && updateSummary;
 
                            return (
                               <div key={log.id} className="relative pl-6">
                                  <span className={clsx("absolute -left-[11px] top-1 w-5 h-5 rounded-full border-4 border-white flex items-center justify-center", idx === auditLogs.length - 1 ? "bg-[#EAF5F2]" : "bg-gray-200")}>
                                     <span className={clsx("w-1.5 h-1.5 rounded-full", idx === auditLogs.length - 1 ? "bg-[#007A64]" : "bg-gray-400")} />
                                  </span>
-                                 <p className="text-sm text-gray-900"><span className="font-bold">{isYou ? 'You' : u.name}</span> {actionStr}</p>
-                                 <p className="text-[11px] text-gray-500 mt-1">{new Date(log.timestamp).toLocaleDateString()} &bull; {new Date(log.timestamp).toLocaleTimeString()}</p>
-                                 
-                                 {parsedChanges.length > 0 && (
-                                    <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2.5">
-                                       {parsedChanges.map((change, cIdx) => {
-                                          if (change.type === 'field') {
-                                             const fieldName = change.field.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-                                             const isMoney = change.field === 'total_amount';
-                                             const oldVal = isMoney ? `$${Number(change.old).toFixed(2)}` : String(change.old || 'None');
-                                             const newVal = isMoney ? `$${Number(change.new).toFixed(2)}` : String(change.new || 'None');
-                                             return (
-                                                <div key={cIdx} className="text-xs text-gray-600 flex items-start gap-2 leading-tight">
-                                                   <span className="text-gray-400 mt-[1px]">&bull;</span>
-                                                   <span>Changed <span className="font-bold text-gray-700">{fieldName}</span> from <span className="line-through text-gray-400 mx-0.5">{oldVal}</span> to <span className="font-bold text-gray-900">{newVal}</span></span>
-                                                </div>
-                                             );
-                                          } else if (change.type === 'split') {
-                                             const splitUser = users.find(usr => usr.id === change.user_id) || { id: -1, name: 'Someone' };
-                                             const splitName = splitUser.id === currentUserId ? 'You' : splitUser.name;
-                                             const fieldName = change.field === 'amount_owed' ? 'Owed amount' : 'Paid amount';
-                                             return (
-                                                <div key={cIdx} className="text-xs text-gray-600 flex items-start gap-2 leading-tight">
-                                                   <span className="text-gray-400 mt-[1px]">&bull;</span>
-                                                   <span>Updated split for <span className="font-bold text-gray-700">{splitName}</span>: {fieldName} changed from <span className="line-through text-gray-400 mx-0.5">${Number(change.old).toFixed(2)}</span> to <span className="font-bold text-gray-900">${Number(change.new).toFixed(2)}</span></span>
-                                                </div>
-                                             );
-                                          }
-                                          return null;
-                                       })}
-                                    </div>
+                                 {isUpdateWithSummary ? (
+                                    <p className="text-sm text-gray-900 leading-snug">
+                                       <span className="font-bold">{isYou ? 'You' : u.name}</span> updated {updateSummary} at <span className="text-gray-600">{changeTimestamp}</span>
+                                    </p>
+                                 ) : (
+                                    <>
+                                       <p className="text-sm text-gray-900"><span className="font-bold">{isYou ? 'You' : u.name}</span> {actionStr}</p>
+                                       <p className="text-[11px] text-gray-500 mt-1">{new Date(log.timestamp).toLocaleDateString()} &bull; {new Date(log.timestamp).toLocaleTimeString()}</p>
+                                    </>
                                  )}
                               </div>
                            );
@@ -347,17 +355,24 @@ export default function ExpenseDetailView({ expense, context, users, currentUser
                onDeleted={onDeleted}
             />
          )}
-         {showReceiptSplitEditor && receiptData && expense.receipt_breakdown && (
+         {showReceiptSplitEditor && receiptEditorData && expense.receipt_breakdown && (
             <ItemizedSplitStep
-               receiptData={receiptData}
+               receiptData={receiptEditorData}
+               setReceiptData={setReceiptEditorData}
                users={users}
                involvedUsers={involvedUsers}
                currentUserId={currentUserId}
                payerId={payerId}
                initialBreakdown={expense.receipt_breakdown}
                onSave={handleSaveReceiptSplit}
-               onClose={() => setShowReceiptSplitEditor(false)}
-               onBack={() => setShowReceiptSplitEditor(false)}
+               onClose={() => {
+                  setShowReceiptSplitEditor(false);
+                  setReceiptEditorData(null);
+               }}
+               onBack={() => {
+                  setShowReceiptSplitEditor(false);
+                  setReceiptEditorData(null);
+               }}
             />
          )}
       </div>

@@ -222,3 +222,19 @@ class Friendship(Base):
         CheckConstraint("requester_id != addressee_id", name="ck_friendships_distinct_users"),
         CheckConstraint("status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'REMOVED')", name="ck_friendships_status"),
     )
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    type = Column(String, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    target_type = Column(String)
+    target_id = Column(Integer, nullable=True)
+    payload = Column(JSON, nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    actor = relationship("User", foreign_keys=[actor_user_id])

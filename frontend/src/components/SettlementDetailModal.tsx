@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { clsx } from 'clsx';
 import MSIcon from './MSIcon';
 import type { Settlement, User } from '../types/api';
@@ -14,13 +14,7 @@ interface SettlementDetailModalProps {
 }
 
 export function SettlementDetailModal({ isOpen, onClose, settlement, users, currentUserId }: SettlementDetailModalProps) {
-   const [amount, setAmount] = useState('');
-   
-   useEffect(() => {
-       if (settlement) {
-           setAmount(settlement.amount.toString());
-       }
-   }, [settlement]);
+   const [amountBySettlement, setAmountBySettlement] = useState<Record<number, string>>({});
 
    const updateSettlement = useUpdateSettlement();
    const deleteSettlement = useDeleteSettlement();
@@ -29,6 +23,7 @@ export function SettlementDetailModal({ isOpen, onClose, settlement, users, curr
 
    const payer = users.find(u => u.id === settlement.payer_id);
    const payee = users.find(u => u.id === settlement.payee_id);
+   const amount = amountBySettlement[settlement.id] ?? settlement.amount.toString();
    
    const numAmount = parseFloat(amount);
    const canSubmit = !isNaN(numAmount) && numAmount > 0 && numAmount !== settlement.amount;
@@ -106,7 +101,7 @@ export function SettlementDetailModal({ isOpen, onClose, settlement, users, curr
                         step="0.01"
                         min="0.01"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => setAmountBySettlement(prev => ({ ...prev, [settlement.id]: e.target.value }))}
                         placeholder="0.00"
                         className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-3 text-3xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#007A64]/20 focus:border-[#007A64]"
                         required
